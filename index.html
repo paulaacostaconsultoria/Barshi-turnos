@@ -189,7 +189,7 @@ function renderAdminAgenda(){
   const el=document.getElementById('adminAgenda');if(!el)return;
   db.appointments=db.appointments||[];
   const arr=[...db.appointments].filter(a=>a.status!=='cancelled').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  el.innerHTML=arr.length?arr.map(a=>'<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+a.name+'</strong><div class="muted">'+a.service+' · '+a.pro+' · '+a.wa+'</div></div><button class="btn danger small" onclick="cancelAppointment('+a.id+')">Cancelar</button></div>').join(''):'<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
+  el.innerHTML=arr.length?arr.map(a=>{const dur=a.duration||appointmentDuration(a);return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+a.name+'</strong><div class="muted">'+a.service+' · '+dur+' min + '+CLEANING_BUFFER+' min limpieza · ocupado hasta '+endTimeLabel(a.time,dur)+' · '+a.pro+' · '+a.wa+'</div></div><button class="btn danger small" onclick="cancelAppointment('+a.id+')">Cancelar</button></div>'}).join(''):'<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
 }
 function cancelAppointment(id){const a=(db.appointments||[]).find(x=>x.id===id);if(a&&confirm('¿Cancelar este turno?')){a.status='cancelled';save()}}
 function saveWa(){db.wa.number=barshiWa.value.trim();db.wa.reminder=reminder.value;save();alert('Configuración guardada para esta revisión.')}
