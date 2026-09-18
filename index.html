@@ -83,9 +83,38 @@ function upcomingBusinessDays(){
   }
   return out;
 }
-function isBusy(day,time){
+function timeToMinutes(t){
+  const [hh,mm]=String(t).split(':').map(Number);
+  return hh*60+mm;
+}
+function appointmentDuration(a){
+  if(a.duration) return Number(a.duration)||30;
+  const s=(db.services||[]).find(x=>String(x.id)===String(a.serviceId));
+  return s ? Number(s.duration)||30 : 30;
+}
+function intervalsOverlap(startA,durA,startB,durB){
+  const a1=timeToMinutes(startA),a2=a1+Number(durA);
+  const b1=timeToMinutes(startB),b2=b1+Number(durB);
+  return a1<b2 && b1<a2;
+}
+function professionalBusy(proId,day,time,duration){
   db.appointments=db.appointments||[];
-  return db.appointments.some(a=>a.date===day&&a.time===time&&a.status!=='cancelled'&&(booking.pro==='any'||!booking.pro||a.proId===booking.pro.id));
+  return db.appointments.some(a=>{
+    if(a.date!==day || a.status==='cancelled') return false;
+    if(a.proId!=null && String(a.proId)!==String(proId)) return false;
+    return intervalsOverlap(time,duration,a.time,appointmentDuration(a));
+  });
+}
+function availableProfessionals(day,time,duration){
+  return (db.pros||[]).filter(p=>p.active && !professionalBusy(p.id,day,time,duration));
+}
+function slotUnavailable(day,time){
+  if(!booking.service) return true;
+  const duration=Number(booking.service.duration)||30;
+  if(timeToMinutes(time)+duration>20*60) return true;
+  if(booking.pro==='any') return availableProfessionals(day,time,duration).length===0;
+  if(booking.pro && booking.pro.id!=null) return professionalBusy(booking.pro.id,day,time,duration);
+  return true;
 }
 function renderAgendaPicker(){
   const days=document.getElementById('agendaDays'),slots=document.getElementById('slotGrid');
@@ -93,21 +122,49 @@ function renderAgendaPicker(){
   const ds=upcomingBusinessDays();
   days.innerHTML=ds.map(d=>{
     const k=dateKey(d),wd=d.toLocaleDateString('es-AR',{weekday:'short'}),dm=d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
-    return '<button class="day-btn '+(booking.date===k?'sel':'')+'" onclick="pickDay(\''+k+'\')"><b>'+wd+'</b><small>'+dm+'</small></button>'
+    return '<button class="day-btn '+(booking.date===k?'sel':'')+'" onclick="pickDay(\\''+k+'\\')"><b>'+wd+'</b><small>'+dm+'</small></button>'
   }).join('');
   if(!booking.date){slots.innerHTML='';return}
-  const times=[];for(let h=9;h<20;h++){times.push(String(h).padStart(2,'0')+':00');times.push(String(h).padStart(2,'0')+':30')}
-  slots.innerHTML=times.map(t=>'<button class="slot '+(isBusy(booking.date,t)?'busy':'')+' '+(booking.time===t?'sel':'')+'" '+(isBusy(booking.date,t)?'disabled':'onclick="pickTime(\''+t+'\')"')+'>'+t+'</button>').join('');
-  const hint=document.getElementById('slotHint');if(hint)hint.textContent=booking.time?'Turno seleccionado: '+formatDate(booking.date)+' a las '+booking.time+'.':'Elegí uno de los horarios disponibles.';
+  const times=[];for(let hh=9;hh<20;hh++){times.push(String(hh).padStart(2,'0')+':00');times.push(String(hh).padStart(2,'0')+':30')}
+  slots.innerHTML=times.map(t=>{
+    const unavailable=slotUnavailable(booking.date,t);
+    return '<button class="slot '+(unavailable?'busy':'')+' '+(booking.time===t?'sel':'')+'" '+(unavailable?'disabled':'onclick="pickTime(\\''+t+'\\')"')+'>'+t+'</button>';
+  }).join('');
+  const hint=document.getElementById('slotHint');
+  if(hint){
+    const dur=Number(booking.service&&booking.service.duration)||30;
+    hint.textContent=booking.time
+      ? 'Turno seleccionado: '+formatDate(booking.date)+' a las '+booking.time+' · duración '+dur+' min.'
+      : 'Elegí uno de los horarios disponibles. La agenda reserva automáticamente '+dur+' min.';
+  }
 }
 function pickDay(k){booking.date=k;booking.time='';renderAgendaPicker()}
 function pickTime(t){booking.time=t;renderAgendaPicker()}
 function formatDate(k){const [y,m,d]=k.split('-');return d+'/'+m+'/'+y}
-function confirmBooking(){if(!name.value.trim()||!wa.value.trim())return alert('Completá nombre y WhatsApp.');booking.name=name.value.trim();booking.wa=wa.value.trim();const pro=booking.pro==='any'?'Cualquier profesional disponible':booking.pro.name;
-db.appointments=db.appointments||[];
-db.appointments.push({id:Date.now(),date:booking.date,time:booking.time,service:booking.service.name,serviceId:booking.service.id,pro:pro,proId:booking.pro==='any'?null:booking.pro.id,name:booking.name,wa:booking.wa,status:'confirmed'});
-save();
-summary.innerHTML=`<div class="row"><span>Servicio</span><b>${booking.service.name}</b></div><div class="row"><span>Profesional</span><b>${pro}</b></div><div class="row"><span>Fecha</span><b>${formatDate(booking.date)}</b></div><div class="row"><span>Hora</span><b>${booking.time}</b></div><div class="row"><span>Cliente</span><b>${booking.name}</b></div><div class="row"><span>WhatsApp</span><b>${booking.wa}</b></div>`;go(5)}
+function confirmBooking(){
+  if(!name.value.trim()||!wa.value.trim())return alert('Completá nombre y WhatsApp.');
+  if(!booking.service||!booking.date||!booking.time)return alert('Falta seleccionar el turno.');
+  const duration=Number(booking.service.duration)||30;
+  if(slotUnavailable(booking.date,booking.time)){
+    alert('Ese horario acaba de dejar de estar disponible. Elegí otro.');
+    booking.time='';renderAgendaPicker();go(3);return;
+  }
+  booking.name=name.value.trim();booking.wa=wa.value.trim();
+  let assignedPro=booking.pro;
+  if(booking.pro==='any'){
+    const available=availableProfessionals(booking.date,booking.time,duration);
+    if(!available.length){
+      alert('Ya no quedan profesionales disponibles en ese horario.');
+      booking.time='';renderAgendaPicker();go(3);return;
+    }
+    assignedPro=available[0];
+  }
+  const pro=assignedPro.name;
+  db.appointments=db.appointments||[];
+  db.appointments.push({id:Date.now(),date:booking.date,time:booking.time,duration:duration,service:booking.service.name,serviceId:booking.service.id,pro:pro,proId:assignedPro.id,name:booking.name,wa:booking.wa,status:'confirmed'});
+  save();
+  summary.innerHTML=`<div class="row"><span>Servicio</span><b>${booking.service.name}</b></div><div class="row"><span>Profesional</span><b>${pro}</b></div><div class="row"><span>Fecha</span><b>${formatDate(booking.date)}</b></div><div class="row"><span>Hora</span><b>${booking.time}</b></div><div class="row"><span>Duración</span><b>${duration} min</b></div><div class="row"><span>Cliente</span><b>${booking.name}</b></div><div class="row"><span>WhatsApp</span><b>${booking.wa}</b></div>`;go(5)
+}
 function go(n){[1,2,3,4,5].forEach(i=>document.getElementById('s'+i).classList.toggle('hidden',i!==n));document.querySelectorAll('.step').forEach((el,i)=>el.classList.toggle('on',i<n));window.scrollTo({top:document.getElementById('booking').offsetTop-10,behavior:'smooth'})}
 function resetBooking(){booking={service:null,pro:null,date:'',time:'',name:'',wa:''};name.value='';wa.value='';renderAll();go(1)}function openAdmin(){drawer.classList.add('open');renderAdmin()}function closeAdmin(){drawer.classList.remove('open')}function tab(id,btn){['services','pros','agenda','whatsapp'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));btn.classList.add('on')}
 function addService(){const n=newServiceName.value.trim(),p=newServicePrice.value.trim(),d=newServiceDuration.value.trim(),desc=newServiceDesc.value.trim();if(!n||!p||!d)return alert('Completá nombre, precio y duración.');db.services.push({id:Date.now(),name:n,price:p,duration:d,desc});newServiceName.value=newServicePrice.value=newServiceDuration.value=newServiceDesc.value='';save()}
