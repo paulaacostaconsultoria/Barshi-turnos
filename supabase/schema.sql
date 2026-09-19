@@ -704,7 +704,7 @@ begin
   if v_client is null then raise exception 'Turno sin cliente asociado'; end if;
   if v_status = 'cancelled' then raise exception 'No se puede validar un turno cancelado'; end if;
 
-  select greatest(club_goal,2) into v_goal from public.settings where id=1;
+  select greatest(s.club_goal,2) into v_goal from public.settings s where s.id=1;
   select c.stamps, c.reward_available into v_stamps, v_reward
   from public.clients c where c.id=v_client for update;
 
