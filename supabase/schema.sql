@@ -519,3 +519,81 @@ create index if not exists idx_appointments_client_id on public.appointments(cli
 create index if not exists idx_appointments_service_id on public.appointments(service_id);
 create index if not exists idx_professional_services_service_id on public.professional_services(service_id);
 create index if not exists idx_schedule_blocks_professional_id on public.schedule_blocks(professional_id);
+
+
+-- Final RLS split: public vs admin
+create schema if not exists private;
+revoke all on schema private from public, anon;
+grant usage on schema private to authenticated;
+
+create or replace function private.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists(
+    select 1 from public.admin_users au
+    where au.user_id = (select auth.uid())
+  );
+$$;
+
+revoke all on function private.is_admin() from public, anon;
+grant execute on function private.is_admin() to authenticated;
+
+drop policy if exists "services select" on public.services;
+drop policy if exists "services public select" on public.services;
+drop policy if exists "services authenticated select" on public.services;
+drop policy if exists "services insert admin" on public.services;
+drop policy if exists "services update admin" on public.services;
+drop policy if exists "services delete admin" on public.services;
+create policy "services public select" on public.services for select to anon using (active);
+create policy "services authenticated select" on public.services for select to authenticated using (active or (select private.is_admin()));
+create policy "services insert admin" on public.services for insert to authenticated with check ((select private.is_admin()));
+create policy "services update admin" on public.services for update to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+create policy "services delete admin" on public.services for delete to authenticated using ((select private.is_admin()));
+
+drop policy if exists "professionals select" on public.professionals;
+drop policy if exists "professionals public select" on public.professionals;
+drop policy if exists "professionals authenticated select" on public.professionals;
+drop policy if exists "professionals insert admin" on public.professionals;
+drop policy if exists "professionals update admin" on public.professionals;
+drop policy if exists "professionals delete admin" on public.professionals;
+create policy "professionals public select" on public.professionals for select to anon using (active);
+create policy "professionals authenticated select" on public.professionals for select to authenticated using (active or (select private.is_admin()));
+create policy "professionals insert admin" on public.professionals for insert to authenticated with check ((select private.is_admin()));
+create policy "professionals update admin" on public.professionals for update to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+create policy "professionals delete admin" on public.professionals for delete to authenticated using ((select private.is_admin()));
+
+drop policy if exists "professional services select" on public.professional_services;
+drop policy if exists "professional services insert admin" on public.professional_services;
+drop policy if exists "professional services update admin" on public.professional_services;
+drop policy if exists "professional services delete admin" on public.professional_services;
+create policy "professional services select" on public.professional_services for select to anon, authenticated using (true);
+create policy "professional services insert admin" on public.professional_services for insert to authenticated with check ((select private.is_admin()));
+create policy "professional services update admin" on public.professional_services for update to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+create policy "professional services delete admin" on public.professional_services for delete to authenticated using ((select private.is_admin()));
+
+drop policy if exists "business hours select" on public.business_hours;
+drop policy if exists "business hours insert admin" on public.business_hours;
+drop policy if exists "business hours update admin" on public.business_hours;
+drop policy if exists "business hours delete admin" on public.business_hours;
+create policy "business hours select" on public.business_hours for select to anon, authenticated using (true);
+create policy "business hours insert admin" on public.business_hours for insert to authenticated with check ((select private.is_admin()));
+create policy "business hours update admin" on public.business_hours for update to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+create policy "business hours delete admin" on public.business_hours for delete to authenticated using ((select private.is_admin()));
+
+drop policy if exists "admin settings" on public.settings;
+create policy "admin settings" on public.settings for update to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+
+drop policy if exists "admin clients" on public.clients;
+create policy "admin clients" on public.clients for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+
+drop policy if exists "admin appointments" on public.appointments;
+create policy "admin appointments" on public.appointments for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+
+drop policy if exists "admin schedule blocks" on public.schedule_blocks;
+create policy "admin schedule blocks" on public.schedule_blocks for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+
+drop function if exists public.is_admin();
