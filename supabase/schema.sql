@@ -264,7 +264,7 @@ slots as (
   from cfg, hours, svc,
   lateral generate_series(
     p_date + hours.open_time,
-    p_date + hours.close_time - make_interval(mins => svc.duration_minutes + cfg.cleaning_buffer_minutes),
+    p_date + hours.close_time - make_interval(mins => cfg.slot_step_minutes),
     make_interval(mins => cfg.slot_step_minutes)
   ) gs
   where p_date >= current_date
@@ -359,7 +359,7 @@ begin
   v_start := p_date + p_time;
   v_end := v_start + make_interval(mins => v_duration + v_buffer);
 
-  if p_time < v_open or v_end > p_date + v_close
+  if p_time < v_open or p_time >= v_close
      or v_start < now() + make_interval(mins => v_notice) then
     raise exception 'Horario no disponible';
   end if;
