@@ -778,7 +778,7 @@ function renderClubPublic(){
     let html="";
     for(let i=1;i<goal;i++) html+='<div class="stamp">'+i+'</div>';
     html+='<div class="stamp">'+escapeHtml(s.clubRewardText||"GRATIS")+'</div>';
-    stamps.style.gridTemplateColumns='repeat('+Math.min(goal,10)+',1fr)';
+    stamps.style.gridTemplateColumns='repeat(auto-fit,minmax(42px,1fr))';
     stamps.innerHTML=html;
   }
   const badge=document.querySelector(".badges .club-badge");
