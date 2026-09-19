@@ -152,6 +152,7 @@ function upcomingBusinessDays(){
 async function init(){
   const initialLogo=$("brandLogo");
   if(initialLogo) defaultLogoSrc=initialLogo.src;
+  if($("blockDate")) $("blockDate").min=dateKey(new Date());
   if(cloudConfigured()){
     const c=window.BARSHI_SUPABASE;
     supa=window.supabase.createClient(c.url,c.publishableKey);
@@ -288,7 +289,11 @@ async function refreshSlots(){
     }
     renderSlotButtons(available,false);
   }
-  if(hint) hint.textContent=booking.time ? "Turno seleccionado: "+formatDate(booking.date)+" a las "+booking.time+"." : "Elegí uno de los horarios disponibles.";
+  if(hint){
+    if(booking.time) hint.textContent="Turno seleccionado: "+formatDate(booking.date)+" a las "+booking.time+".";
+    else if(available.size===0) hint.textContent="No hay turnos disponibles para ese día. Probá con otra fecha.";
+    else hint.textContent="Elegí uno de los horarios disponibles.";
+  }
 }
 function renderSlotButtons(available,fromCloud){
   const slots=$("slotGrid");
@@ -726,17 +731,17 @@ window.toggleHourRow=function(day){
 };
 window.saveBusinessHours=async function(){
   const rows=Array.from(document.querySelectorAll(".hours-row"));
-  const payload=rows.map(function(row){
-    const day=Number(row.dataset.day);
-    const isOpen=row.querySelector(".hours-open").checked;
-    const from=row.querySelector(".hours-from").value || "09:00";
-    const to=row.querySelector(".hours-to").value || "20:00";
-    if(isOpen && timeToMinutes(to)<=timeToMinutes(from)) throw new Error(dayName(day)+": el cierre debe ser posterior a la apertura.");
-    return {day_of_week:day,is_open:isOpen,open_time:from,close_time:to,updated_at:new Date().toISOString()};
-  });
   const horizon=Number($("bookingHorizon").value||30);
   const notice=Number($("minimumNotice").value||30);
   try{
+    const payload=rows.map(function(row){
+      const day=Number(row.dataset.day);
+      const isOpen=row.querySelector(".hours-open").checked;
+      const from=row.querySelector(".hours-from").value || "09:00";
+      const to=row.querySelector(".hours-to").value || "20:00";
+      if(isOpen && timeToMinutes(to)<=timeToMinutes(from)) throw new Error(dayName(day)+": el cierre debe ser posterior a la apertura.");
+      return {day_of_week:day,is_open:isOpen,open_time:from,close_time:to,updated_at:new Date().toISOString()};
+    });
     if(cloud){
       const r1=await supa.from("business_hours").upsert(payload,{onConflict:"day_of_week"});
       if(r1.error) throw r1.error;
