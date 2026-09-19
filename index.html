@@ -134,13 +134,13 @@ function renderAgendaPicker(){
   const ds=upcomingBusinessDays();
   days.innerHTML=ds.map(d=>{
     const k=dateKey(d),wd=d.toLocaleDateString('es-AR',{weekday:'short'}),dm=d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
-    return '<button class="day-btn '+(booking.date===k?'sel':'')+'" onclick="pickDay(\\''+k+'\\')"><b>'+wd+'</b><small>'+dm+'</small></button>'
+    return '<button class="day-btn '+(booking.date===k?'sel':'')+'" onclick="pickDay(\''+k+'\')"><b>'+wd+'</b><small>'+dm+'</small></button>'
   }).join('');
   if(!booking.date){slots.innerHTML='';return}
   const times=[];for(let m=OPEN_MIN;m<CLOSE_MIN;m+=SLOT_STEP){const hh=Math.floor(m/60),mm=m%60;times.push(String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0'))}
   slots.innerHTML=times.map(t=>{
     const unavailable=slotUnavailable(booking.date,t);
-    return '<button class="slot '+(unavailable?'busy':'')+' '+(booking.time===t?'sel':'')+'" '+(unavailable?'disabled':'onclick="pickTime(\\''+t+'\\')"')+'>'+t+'</button>';
+    return '<button class="slot '+(unavailable?'busy':'')+' '+(booking.time===t?'sel':'')+'" '+(unavailable?'disabled':'onclick="pickTime(\''+t+'\')"')+'>'+t+'</button>';
   }).join('');
   const hint=document.getElementById('slotHint');
   if(hint){
