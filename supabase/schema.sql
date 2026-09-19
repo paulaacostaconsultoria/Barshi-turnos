@@ -1083,3 +1083,70 @@ create trigger trg_notify_new_booking_push
 after insert on public.appointments
 for each row
 execute function public.notify_new_booking_push();
+
+
+-- Recordatorios push automáticos
+create extension if not exists pg_cron;
+
+alter table public.appointments
+  add column if not exists reminder_push_notified_at timestamptz;
+
+create index if not exists idx_appointments_reminder_pending
+on public.appointments(appointment_date, appointment_time)
+where status='confirmed' and reminder_push_notified_at is null;
+
+create or replace function public.claim_due_reminder_appointments()
+returns table(
+  appointment_id uuid,
+  client_name text,
+  appointment_date date,
+  appointment_time time,
+  service_name text,
+  professional_name text,
+  reminder_hours integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_now_local timestamp := now() at time zone 'America/Argentina/Buenos_Aires';
+  v_hours integer;
+begin
+  select greatest(coalesce(s.reminder_hours,24),1)
+  into v_hours
+  from public.settings s
+  where s.id=1;
+
+  return query
+  with due as (
+    select a.id
+    from public.appointments a
+    where a.status='confirmed'
+      and a.reminder_push_notified_at is null
+      and (a.appointment_date + a.appointment_time) > v_now_local
+      and (a.appointment_date + a.appointment_time) <= v_now_local + make_interval(hours => v_hours)
+      and a.created_at <= now() - interval '10 minutes'
+    order by a.appointment_date,a.appointment_time
+    for update skip locked
+  ),
+  claimed as (
+    update public.appointments a
+    set reminder_push_notified_at=now()
+    from due
+    where a.id=due.id
+    returning a.*
+  )
+  select c.id,c.client_name,c.appointment_date,c.appointment_time,
+         sv.name,p.name,v_hours
+  from claimed c
+  join public.services sv on sv.id=c.service_id
+  join public.professionals p on p.id=c.professional_id
+  order by c.appointment_date,c.appointment_time;
+end;
+$$;
+
+revoke all on function public.claim_due_reminder_appointments() from public, anon, authenticated;
+grant execute on function public.claim_due_reminder_appointments() to service_role;
+
+-- Producción: cron 'barshi-reminder-push' ejecuta notify-reminders cada 5 minutos.
