@@ -69,6 +69,7 @@ let cloudAllServices = [];
 let cloudAllPros = [];
 let cloudScheduleBlocks = [];
 let cloudPromotions = [];
+let cloudHistory = [];
 let defaultLogoSrc = "";
 
 function money(v){
@@ -308,6 +309,7 @@ function renderAll(){
   renderAdmin();
   renderAgendaPicker();
   renderAdminAgenda();
+  renderAdminHistory();
   renderHoursEditor();
   renderScheduleBlocks();
   renderBusinessForm();
@@ -603,12 +605,13 @@ window.adminLogout=async function(){
   closeAdmin();
 };
 window.tab=function(id,btn){
-  ["services","pros","agenda","hours","business","club","whatsapp"].forEach(function(x){
+  ["services","pros","agenda","history","hours","business","club","whatsapp"].forEach(function(x){
     const el=$("tab-"+x); if(el) el.classList.toggle("hidden",x!==id);
   });
   document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on");});
   if(btn) btn.classList.add("on");
   if(id==="agenda") renderAdminAgenda();
+  if(id==="history") renderAdminHistory();
   if(id==="whatsapp") updatePushNotificationStatus();
 };
 
@@ -631,7 +634,13 @@ async function loadAdminData(){
       .order("block_date",{ascending:true}),
     supa.from("business_hours").select("*").order("day_of_week"),
     supa.from("settings").select("*").eq("id",1).maybeSingle(),
-    supa.from("promotions").select("*").order("sort_order").order("created_at")
+    supa.from("promotions").select("*").order("sort_order").order("created_at"),
+    supa.from("appointments")
+      .select("id,appointment_date,appointment_time,status,client_name,client_whatsapp,service_id,professional_id,services(name),professionals(name),clients(stamps,reward_available)")
+      .eq("status","completed")
+      .order("appointment_date",{ascending:false})
+      .order("appointment_time",{ascending:false})
+      .limit(1000)
   ]);
   if(!results[0].error) cloudAllServices=(results[0].data||[]).map(mapService);
   if(!results[1].error) cloudAllPros=(results[1].data||[]).map(mapPro);
@@ -640,6 +649,7 @@ async function loadAdminData(){
   if(!results[4].error && results[4].data) db.businessHours=results[4].data.map(mapHour);
   if(!results[5].error && results[5].data) applySettingsRow(results[5].data);
   if(!results[6].error) cloudPromotions=results[6].data||[];
+  if(!results[7].error) cloudHistory=results[7].data||[];
   renderAdmin();
   renderAdminAgenda();
   renderHoursEditor();
@@ -703,6 +713,13 @@ function renderAdmin(){
       yesterday.setDate(today.getDate()-1);
       manualDate.value=dateKey(yesterday);
     }
+  }
+
+  const historyPro=$("historyProfessional");
+  if(historyPro){
+    const current=historyPro.value;
+    historyPro.innerHTML='<option value="">Todos</option>'+pros.map(function(p){return '<option value="'+p.id+'">'+escapeHtml(p.name)+'</option>';}).join("");
+    historyPro.value=current;
   }
 }
 window.addService=async function(){
@@ -914,6 +931,63 @@ function renderAdminAgenda(){
     return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+escapeHtml(a.name)+'</strong><div class="muted">'+escapeHtml(a.service)+' · '+dur+' min · '+escapeHtml(a.pro)+' · '+escapeHtml(a.wa)+'</div></div><button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button></div>';
   }).join("") : '<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
 }
+
+window.renderAdminHistory=function(){
+  const el=$("adminHistory");
+  if(!el) return;
+  const search=String($("historySearch")&&$("historySearch").value||"").trim().toLowerCase();
+  const proId=String($("historyProfessional")&&$("historyProfessional").value||"");
+  const goal=Math.max(2,Number(db.settings&&db.settings.clubGoal)||10);
+  const paidTarget=goal-1;
+
+  let rows=(cloud&&adminReady ? cloudHistory : (db.appointments||[]).filter(function(a){return a.status==="completed";})).slice();
+
+  rows=rows.filter(function(a){
+    const name=String(a.client_name||a.name||"").toLowerCase();
+    const wa=String(a.client_whatsapp||a.wa||"").toLowerCase();
+    const p=String(a.professional_id||a.proId||"");
+    return (!search || name.includes(search) || wa.includes(search))
+      && (!proId || p===proId);
+  });
+
+  rows.sort(function(x,y){
+    const ax=(x.appointment_date||x.date||"")+" "+String(x.appointment_time||x.time||"");
+    const by=(y.appointment_date||y.date||"")+" "+String(y.appointment_time||y.time||"");
+    return by.localeCompare(ax);
+  });
+
+  const count=$("historyCount");
+  if(count) count.textContent=rows.length+" "+(rows.length===1?"visita":"visitas");
+
+  if(!rows.length){
+    el.innerHTML='<div class="notice">No encontramos visitas atendidas con esos filtros.</div>';
+    return;
+  }
+
+  const head='<div class="history-row history-head"><div>Fecha</div><div>Hora</div><div>Cliente</div><div>Servicio</div><div>Profesional</div><div>Club</div></div>';
+  const body=rows.map(function(a){
+    const client=a.clients||{};
+    const stamps=Number(client.stamps||0);
+    const reward=!!client.reward_available;
+    const service=a.services&&a.services.name ? a.services.name : (a.service||"Servicio");
+    const pro=a.professionals&&a.professionals.name ? a.professionals.name : (a.pro||"Profesional");
+    const date=a.appointment_date||a.date||"";
+    const time=String(a.appointment_time||a.time||"").slice(0,5);
+    const name=a.client_name||a.name||"Cliente";
+    const wa=a.client_whatsapp||a.wa||"";
+    const clubText=reward ? "Beneficio disponible" : stamps+" de "+paidTarget+" sellos";
+    return '<div class="history-row">'+
+      '<div class="history-cell" data-label="Fecha"><b>'+formatDate(date)+'</b></div>'+
+      '<div class="history-cell" data-label="Hora"><b>'+escapeHtml(time)+'</b></div>'+
+      '<div class="history-client"><strong>'+escapeHtml(name)+'</strong><small>'+escapeHtml(wa)+'</small></div>'+
+      '<div class="history-cell" data-label="Servicio">'+escapeHtml(service)+'</div>'+
+      '<div class="history-cell" data-label="Profesional">'+escapeHtml(pro)+'</div>'+
+      '<div class="history-cell history-stamps" data-label="Club">'+escapeHtml(clubText)+'</div>'+
+    '</div>';
+  }).join("");
+
+  el.innerHTML=head+body;
+};
 
 window.registerManualVisit=async function(){
   if(!cloud || !adminReady) return alert("Necesitás ingresar al panel administrativo.");
