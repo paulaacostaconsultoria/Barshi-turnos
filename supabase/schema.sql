@@ -989,3 +989,65 @@ $$;
 
 revoke all on function public.register_manual_visit(text,text,uuid,uuid,date,time) from public, anon;
 grant execute on function public.register_manual_visit(text,text,uuid,uuid,date,time) to authenticated;
+
+
+-- Notificaciones push para administradores
+create table if not exists public.admin_push_subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.admin_push_subscriptions enable row level security;
+
+create policy "push subscriptions select own admin"
+on public.admin_push_subscriptions for select to authenticated
+using (
+  user_id = (select auth.uid())
+  and exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+);
+
+create policy "push subscriptions insert own admin"
+on public.admin_push_subscriptions for insert to authenticated
+with check (
+  user_id = (select auth.uid())
+  and exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+);
+
+create policy "push subscriptions update own admin"
+on public.admin_push_subscriptions for update to authenticated
+using (
+  user_id = (select auth.uid())
+  and exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+)
+with check (
+  user_id = (select auth.uid())
+  and exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+);
+
+create policy "push subscriptions delete own admin"
+on public.admin_push_subscriptions for delete to authenticated
+using (
+  user_id = (select auth.uid())
+  and exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+);
+
+create table if not exists public.push_config (
+  id integer primary key check (id=1),
+  public_key text not null,
+  private_key text not null,
+  subject text not null,
+  updated_at timestamptz not null default now()
+);
+alter table public.push_config enable row level security;
+-- Las claves VAPID se configuran únicamente en la base de datos de producción.
+
+alter table public.appointments
+  add column if not exists push_notified_at timestamptz;
+
+create index if not exists idx_push_subscriptions_user
+on public.admin_push_subscriptions(user_id);
