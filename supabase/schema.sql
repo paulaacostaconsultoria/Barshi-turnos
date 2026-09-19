@@ -767,3 +767,109 @@ grant execute on function public.redeem_appointment_reward(uuid) to authenticate
 
 create index if not exists idx_promotions_active_sort
 on public.promotions(active, sort_order);
+
+
+-- Enlaces privados de Mi Club Barshi
+alter table public.clients
+  add column if not exists club_access_token uuid default gen_random_uuid();
+
+update public.clients
+set club_access_token = gen_random_uuid()
+where club_access_token is null;
+
+alter table public.clients
+  alter column club_access_token set not null;
+
+create unique index if not exists idx_clients_club_access_token
+on public.clients(club_access_token);
+
+create or replace function public.get_club_status(p_token uuid)
+returns table(
+  client_name text,
+  stamps integer,
+  reward_available boolean,
+  club_goal integer,
+  club_label text,
+  club_title text,
+  club_legend text,
+  club_reward_text text,
+  next_date date,
+  next_time time,
+  next_service text,
+  next_professional text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    split_part(c.full_name, ' ', 1),
+    c.stamps,
+    c.reward_available,
+    greatest(s.club_goal,2),
+    s.club_label,
+    s.club_title,
+    s.club_legend,
+    s.club_reward_text,
+    nxt.appointment_date,
+    nxt.appointment_time,
+    nxt.service_name,
+    nxt.professional_name
+  from public.clients c
+  cross join public.settings s
+  left join lateral (
+    select
+      a.appointment_date,
+      a.appointment_time,
+      sv.name as service_name,
+      p.name as professional_name
+    from public.appointments a
+    join public.services sv on sv.id = a.service_id
+    join public.professionals p on p.id = a.professional_id
+    where a.client_id = c.id
+      and a.status = 'confirmed'
+      and (a.appointment_date + a.appointment_time) >= now()
+    order by a.appointment_date, a.appointment_time
+    limit 1
+  ) nxt on true
+  where c.club_access_token = p_token
+  limit 1;
+$$;
+
+revoke all on function public.get_club_status(uuid) from public;
+grant execute on function public.get_club_status(uuid) to anon, authenticated;
+
+create or replace function public.rotate_club_access_token(p_client_id uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_token uuid;
+begin
+  if not exists (
+    select 1 from public.admin_users au
+    where au.user_id = auth.uid()
+  ) then
+    raise exception 'Sin permisos de administración';
+  end if;
+
+  v_token := gen_random_uuid();
+
+  update public.clients
+  set club_access_token = v_token,
+      updated_at = now()
+  where id = p_client_id;
+
+  if not found then
+    raise exception 'Cliente no encontrado';
+  end if;
+
+  return v_token;
+end;
+$$;
+
+revoke all on function public.rotate_club_access_token(uuid) from public, anon;
+grant execute on function public.rotate_club_access_token(uuid) to authenticated;
