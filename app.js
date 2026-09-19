@@ -527,12 +527,15 @@ window.tab=function(id,btn){
 
 async function loadAdminData(){
   if(!cloud || !adminReady) return;
+  const historyStart=new Date();
+  historyStart.setDate(historyStart.getDate()-30);
+  const historyStartKey=dateKey(historyStart);
   const results=await Promise.all([
     supa.from("services").select("*").order("sort_order"),
     supa.from("professionals").select("*").order("name"),
     supa.from("appointments")
       .select("id,client_id,appointment_date,appointment_time,duration_minutes,status,client_name,client_whatsapp,service_id,professional_id,services(name),professionals(name),clients(stamps,reward_available,club_access_token)")
-      .gte("appointment_date",dateKey(new Date()))
+      .gte("appointment_date",historyStartKey)
       .order("appointment_date",{ascending:true})
       .order("appointment_time",{ascending:true}),
     supa.from("schedule_blocks")
@@ -589,6 +592,29 @@ function renderAdmin(){
     const current=bp.value;
     bp.innerHTML='<option value="">Todo el local</option>'+pros.filter(function(p){return p.active;}).map(function(p){return '<option value="'+p.id+'">'+escapeHtml(p.name)+'</option>';}).join("");
     bp.value=current;
+  }
+
+  const manualService=$("manualVisitService");
+  if(manualService){
+    const current=manualService.value;
+    manualService.innerHTML=services.map(function(s){return '<option value="'+s.id+'">'+escapeHtml(s.name)+(s.active?"":" (inactivo)")+'</option>';}).join("");
+    if(current && services.some(function(s){return String(s.id)===String(current);})) manualService.value=current;
+  }
+  const manualPro=$("manualVisitPro");
+  if(manualPro){
+    const current=manualPro.value;
+    manualPro.innerHTML=pros.map(function(p){return '<option value="'+p.id+'">'+escapeHtml(p.name)+(p.active?"":" (inactivo)")+'</option>';}).join("");
+    if(current && pros.some(function(p){return String(p.id)===String(current);})) manualPro.value=current;
+  }
+  const manualDate=$("manualVisitDate");
+  if(manualDate){
+    const today=new Date();
+    manualDate.max=dateKey(today);
+    if(!manualDate.value){
+      const yesterday=new Date(today);
+      yesterday.setDate(today.getDate()-1);
+      manualDate.value=dateKey(yesterday);
+    }
   }
 }
 window.addService=async function(){
@@ -735,7 +761,9 @@ function renderAdminAgenda(){
   if(cloud && adminReady){
     const goal=Math.max(2,Number(db.settings&&db.settings.clubGoal)||10);
     const paidTarget=goal-1;
-    el.innerHTML=cloudAppointments.length ? cloudAppointments.map(function(a){
+    const today=dateKey(new Date());
+
+    function appointmentCard(a){
       const service=a.services && a.services.name ? a.services.name : "Servicio";
       const pro=a.professionals && a.professionals.name ? a.professionals.name : "Profesional";
       const dur=Number(a.duration_minutes||30);
@@ -746,6 +774,7 @@ function renderAdminAgenda(){
         ? '<div class="loyalty-meta"><span class="status-pill reward">Beneficio disponible</span></div>'
         : '<div class="loyalty-meta">Club: '+stamps+' de '+paidTarget+' visitas validadas</div>';
       if(reminderIsDue(a)) loyalty+='<div class="loyalty-meta"><span class="status-pill reward">Recordatorio recomendado</span></div>';
+
       let actions='<div class="appt-actions">';
       if(a.status==="confirmed"){
         actions += reward
@@ -764,16 +793,90 @@ function renderAdminAgenda(){
         actions += '<span class="status-pill">'+escapeHtml(a.status)+'</span>';
       }
       actions+='</div>';
-      return '<div class="appt"><b>'+formatDate(a.appointment_date)+'</b><b>'+String(a.appointment_time).slice(0,5)+'</b><div><strong>'+escapeHtml(a.client_name)+'</strong><div class="muted">'+escapeHtml(service)+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.appointment_time,dur)+' · '+escapeHtml(pro)+' · '+escapeHtml(a.client_whatsapp)+'</div>'+loyalty+'</div>'+actions+'</div>';
-    }).join("") : '<div class="notice">No hay turnos próximos.</div>';
+
+      return '<div class="appt"><b>'+formatDate(a.appointment_date)+'</b><b>'+String(a.appointment_time).slice(0,5)+'</b><div><strong>'+escapeHtml(a.client_name)+'</strong><div class="muted">'+escapeHtml(service)+' · '+dur+' min · '+escapeHtml(pro)+' · '+escapeHtml(a.client_whatsapp)+'</div>'+loyalty+'</div>'+actions+'</div>';
+    }
+
+    const upcoming=cloudAppointments.filter(function(a){
+      return a.appointment_date>=today && a.status==="confirmed";
+    }).sort(function(x,y){
+      return (x.appointment_date+String(x.appointment_time)).localeCompare(y.appointment_date+String(y.appointment_time));
+    });
+
+    const history=cloudAppointments.filter(function(a){
+      return !(a.appointment_date>=today && a.status==="confirmed");
+    }).sort(function(x,y){
+      return (y.appointment_date+String(y.appointment_time)).localeCompare(x.appointment_date+String(x.appointment_time));
+    });
+
+    let html='';
+    html+='<div class="section-title" style="margin-top:4px"><h3>Próximos turnos</h3><span>'+upcoming.length+'</span></div>';
+    html+=upcoming.length?upcoming.map(appointmentCard).join(""):'<div class="notice">No hay próximos turnos confirmados.</div>';
+
+    html+='<div class="section-title" style="margin-top:22px"><h3>Historial reciente</h3><span>Últimos 30 días</span></div>';
+    html+=history.length?history.map(appointmentCard).join(""):'<div class="notice">Todavía no hay visitas recientes.</div>';
+
+    el.innerHTML=html;
     return;
   }
+
   const arr=(db.appointments||[]).filter(function(a){return a.status!=="cancelled";}).sort(function(a,b){return (a.date+a.time).localeCompare(b.date+b.time);});
   el.innerHTML=arr.length ? arr.map(function(a){
     const dur=Number(a.duration||30);
-    return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+escapeHtml(a.name)+'</strong><div class="muted">'+escapeHtml(a.service)+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.time,dur)+' · '+escapeHtml(a.pro)+' · '+escapeHtml(a.wa)+'</div></div><button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button></div>';
+    return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+escapeHtml(a.name)+'</strong><div class="muted">'+escapeHtml(a.service)+' · '+dur+' min · '+escapeHtml(a.pro)+' · '+escapeHtml(a.wa)+'</div></div><button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button></div>';
   }).join("") : '<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
 }
+
+window.registerManualVisit=async function(){
+  if(!cloud || !adminReady) return alert("Necesitás ingresar al panel administrativo.");
+  const name=$("manualVisitName").value.trim();
+  const wa=$("manualVisitWa").value.trim();
+  const serviceId=$("manualVisitService").value;
+  const proId=$("manualVisitPro").value;
+  const date=$("manualVisitDate").value;
+  const time=$("manualVisitTime").value || "12:00";
+
+  if(!name || !wa || !serviceId || !proId || !date){
+    return alert("Completá nombre, WhatsApp, servicio, profesional y fecha.");
+  }
+
+  if(!confirm("¿Registrar esta visita como atendida y sumar su sello del Club Barshi?")) return;
+
+  const btn=document.querySelector('button[onclick="registerManualVisit()"]');
+  if(btn){btn.disabled=true;btn.textContent="Registrando…";}
+
+  const res=await supa.rpc("register_manual_visit",{
+    p_client_name:name,
+    p_client_whatsapp:wa,
+    p_service_id:serviceId,
+    p_professional_id:proId,
+    p_date:date,
+    p_time:time
+  });
+
+  if(btn){btn.disabled=false;btn.textContent="Registrar visita y sumar sello";}
+
+  if(res.error){
+    return alert(res.error.message||"No se pudo registrar la visita.");
+  }
+
+  const row=(res.data||[])[0]||{};
+  $("manualVisitName").value="";
+  $("manualVisitWa").value="";
+  const yesterday=new Date();
+  yesterday.setDate(yesterday.getDate()-1);
+  $("manualVisitDate").value=dateKey(yesterday);
+  $("manualVisitTime").value="12:00";
+
+  await loadAdminData();
+
+  if(row.reward_available){
+    alert("Visita registrada. El cliente ya tiene disponible su beneficio del Club Barshi.");
+  }else{
+    alert("Visita registrada y sello agregado. Ahora tiene "+Number(row.stamps||0)+" sello(s).");
+  }
+};
+
 function normalizeClientWhatsapp(v){
   let d=String(v||"").replace(/\D/g,"");
   if(d.startsWith("00")) d=d.slice(2);
