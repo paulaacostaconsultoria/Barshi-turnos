@@ -8,6 +8,10 @@ const OPEN_MIN = 9*60;
 const CLOSE_MIN = 20*60;
 const SLOT_STEP = 15;
 const CLEANING_BUFFER = 15;
+const SUPABASE_FALLBACK = {
+  url: "https://vzpeofhmqrumcgwzwkkr.supabase.co",
+  publishableKey: "sb_publishable_p8C4f1CPFc5nSn7c-zVTHA_qYzcLYzn"
+};
 
 const defaults = {
   services:[
@@ -70,8 +74,15 @@ function parsePrice(v){
 function saveLocal(){
   localStorage.setItem(LOCAL_KEY, JSON.stringify(db));
 }
+function getSupabaseConfig(){
+  const c=window.BARSHI_SUPABASE||{};
+  return {
+    url:c.url||SUPABASE_FALLBACK.url,
+    publishableKey:c.publishableKey||SUPABASE_FALLBACK.publishableKey
+  };
+}
 function cloudConfigured(){
-  const c = window.BARSHI_SUPABASE || {};
+  const c=getSupabaseConfig();
   return !!(c.url && c.publishableKey && window.supabase && window.supabase.createClient);
 }
 function mapService(s){
@@ -154,7 +165,7 @@ async function init(){
   if(initialLogo) defaultLogoSrc=initialLogo.src;
   if($("blockDate")) $("blockDate").min=dateKey(new Date());
   if(cloudConfigured()){
-    const c=window.BARSHI_SUPABASE;
+    const c=getSupabaseConfig();
     supa=window.supabase.createClient(c.url,c.publishableKey);
     cloud=true;
     await loadPublicData();
@@ -431,7 +442,7 @@ async function verifyAdmin(userId){
 }
 window.openAdmin=async function(){
   if(!cloud){
-    showAuth("La administración segura todavía no está conectada a la base de datos. Falta configurar Supabase.");
+    showAuth("No pudimos conectar con la base de datos. Recargá la página e intentá nuevamente.");
     return;
   }
   const sessionRes=await supa.auth.getSession();
