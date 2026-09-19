@@ -24,6 +24,7 @@ const defaults = {
     {id:2,name:"Franco",active:true}
   ],
   appointments:[],
+  promotions:[],
   scheduleBlocks:[],
   businessHours:[
     {day_of_week:1,is_open:false,open_time:"09:00",close_time:"20:00"},
@@ -37,7 +38,11 @@ const defaults = {
   wa:{number:"",reminder:"24 horas antes"},
   settings:{
     businessName:"Barshi Barber",tagline:"Estilo que te define",address:"Magallanes 436",city:"Tandil",
-    logoUrl:"",slotStep:15,bookingHorizon:30,minimumNotice:30
+    logoUrl:"",slotStep:15,bookingHorizon:30,minimumNotice:30,
+    clubEnabled:true,clubLabel:"CLUB BARSHI",
+    clubTitle:"Nueve visitas. La décima, por la casa.",
+    clubLegend:"Reservá siempre con el mismo WhatsApp. Barshi valida un sello después de cada corte.",
+    clubGoal:10,clubRewardText:"GRATIS",clubBadgeText:"El 10.º corte es gratis"
   }
 };
 
@@ -46,6 +51,7 @@ let db = {
   services:Array.isArray(storedDb.services)?storedDb.services:JSON.parse(JSON.stringify(defaults.services)),
   pros:Array.isArray(storedDb.pros)?storedDb.pros:JSON.parse(JSON.stringify(defaults.pros)),
   appointments:Array.isArray(storedDb.appointments)?storedDb.appointments:[],
+  promotions:Array.isArray(storedDb.promotions)?storedDb.promotions:[],
   scheduleBlocks:Array.isArray(storedDb.scheduleBlocks)?storedDb.scheduleBlocks:[],
   businessHours:Array.isArray(storedDb.businessHours)&&storedDb.businessHours.length?storedDb.businessHours:JSON.parse(JSON.stringify(defaults.businessHours)),
   wa:Object.assign({},defaults.wa,storedDb.wa||{}),
@@ -60,6 +66,7 @@ let cloudAppointments = [];
 let cloudAllServices = [];
 let cloudAllPros = [];
 let cloudScheduleBlocks = [];
+let cloudPromotions = [];
 let defaultLogoSrc = "";
 
 function money(v){
@@ -119,7 +126,14 @@ function applySettingsRow(s){
     logoUrl:s.logo_url || "",
     slotStep:Number(s.slot_step_minutes||15),
     bookingHorizon:Number(s.booking_horizon_days||30),
-    minimumNotice:Number(s.minimum_notice_minutes||30)
+    minimumNotice:Number(s.minimum_notice_minutes||30),
+    clubEnabled:s.club_enabled !== false,
+    clubLabel:s.club_label || "CLUB BARSHI",
+    clubTitle:s.club_title || "Nueve visitas. La décima, por la casa.",
+    clubLegend:s.club_legend || "Reservá siempre con el mismo WhatsApp. Barshi valida un sello después de cada corte.",
+    clubGoal:Number(s.club_goal||10),
+    clubRewardText:s.club_reward_text || "GRATIS",
+    clubBadgeText:s.club_badge_text || "El 10.º corte es gratis"
   };
 }
 function dateKey(d){
@@ -184,7 +198,8 @@ async function loadPublicData(){
       supa.from("services").select("*").eq("active",true).order("sort_order"),
       supa.from("professionals").select("*").eq("active",true).order("name"),
       supa.from("settings").select("*").eq("id",1).maybeSingle(),
-      supa.from("business_hours").select("*").order("day_of_week")
+      supa.from("business_hours").select("*").order("day_of_week"),
+      supa.from("promotions").select("*").eq("active",true).order("sort_order").order("created_at")
     ]);
     if(results[0].error) throw results[0].error;
     if(results[1].error) throw results[1].error;
@@ -192,6 +207,7 @@ async function loadPublicData(){
     db.pros=(results[1].data||[]).map(mapPro);
     if(results[2].data) applySettingsRow(results[2].data);
     if(!results[3].error && results[3].data && results[3].data.length) db.businessHours=results[3].data.map(mapHour);
+    if(!results[4].error) db.promotions=results[4].data||[];
   }catch(e){
     console.error("Supabase public load failed",e);
     cloud=false;
@@ -208,6 +224,9 @@ function renderAll(){
   renderHoursEditor();
   renderScheduleBlocks();
   renderBusinessForm();
+  renderClubPublic();
+  renderClubAdmin();
+  renderPromotionsAdmin();
 }
 function renderServices(){
   const el=$("serviceGrid");
@@ -495,7 +514,7 @@ window.adminLogout=async function(){
   closeAdmin();
 };
 window.tab=function(id,btn){
-  ["services","pros","agenda","hours","business","whatsapp"].forEach(function(x){
+  ["services","pros","agenda","hours","business","club","whatsapp"].forEach(function(x){
     const el=$("tab-"+x); if(el) el.classList.toggle("hidden",x!==id);
   });
   document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on");});
@@ -509,7 +528,7 @@ async function loadAdminData(){
     supa.from("services").select("*").order("sort_order"),
     supa.from("professionals").select("*").order("name"),
     supa.from("appointments")
-      .select("id,appointment_date,appointment_time,duration_minutes,status,client_name,client_whatsapp,service_id,professional_id,services(name),professionals(name)")
+      .select("id,client_id,appointment_date,appointment_time,duration_minutes,status,client_name,client_whatsapp,service_id,professional_id,services(name),professionals(name),clients(stamps,reward_available)")
       .gte("appointment_date",dateKey(new Date()))
       .order("appointment_date",{ascending:true})
       .order("appointment_time",{ascending:true}),
@@ -518,7 +537,8 @@ async function loadAdminData(){
       .gte("block_date",dateKey(new Date()))
       .order("block_date",{ascending:true}),
     supa.from("business_hours").select("*").order("day_of_week"),
-    supa.from("settings").select("*").eq("id",1).maybeSingle()
+    supa.from("settings").select("*").eq("id",1).maybeSingle(),
+    supa.from("promotions").select("*").order("sort_order").order("created_at")
   ]);
   if(!results[0].error) cloudAllServices=(results[0].data||[]).map(mapService);
   if(!results[1].error) cloudAllPros=(results[1].data||[]).map(mapPro);
@@ -526,11 +546,15 @@ async function loadAdminData(){
   if(!results[3].error) cloudScheduleBlocks=results[3].data||[];
   if(!results[4].error && results[4].data) db.businessHours=results[4].data.map(mapHour);
   if(!results[5].error && results[5].data) applySettingsRow(results[5].data);
+  if(!results[6].error) cloudPromotions=results[6].data||[];
   renderAdmin();
   renderAdminAgenda();
   renderHoursEditor();
   renderScheduleBlocks();
   renderBusinessForm();
+  renderClubPublic();
+  renderClubAdmin();
+  renderPromotionsAdmin();
   applyPublicBusinessInfo();
 }
 function renderAdmin(){
@@ -542,7 +566,8 @@ function renderAdmin(){
       return '<div class="admin-item"><strong>'+escapeHtml(s.name)+'</strong>'+
         '<span style="color:var(--muted)">'+Number(s.duration)+' min · '+money(s.price)+' · '+(s.active?"Activo":"Inactivo")+'</span>'+
         '<div class="admin-actions"><button class="btn secondary small" onclick="editService(\''+s.id+'\')">Editar</button>'+
-        '<button class="btn '+(s.active?"danger":"secondary")+' small" onclick="toggleService(\''+s.id+'\')">'+(s.active?"Desactivar":"Activar")+'</button></div></div>';
+        '<button class="btn '+(s.active?"secondary":"secondary")+' small" onclick="toggleService(\''+s.id+'\')">'+(s.active?"Desactivar":"Activar")+'</button>'+
+        '<button class="btn danger small" onclick="deleteService(\''+s.id+'\')">Eliminar</button></div></div>';
     }).join("");
   }
   if(proEl){
@@ -608,6 +633,28 @@ window.toggleService=async function(id){
   }else{ s.active=!s.active; saveLocal(); }
   renderAll();
 };
+window.deleteService=async function(id){
+  const list=cloud&&adminReady?cloudAllServices:db.services;
+  const s=list.find(function(x){return String(x.id)===String(id);});
+  if(!s) return;
+  if(!confirm('¿Eliminar "'+s.name+'"? Esta acción no se puede deshacer.')) return;
+  if(cloud){
+    const res=await supa.from("services").delete().eq("id",id);
+    if(res.error){
+      if(String(res.error.message||"").toLowerCase().includes("foreign key")){
+        alert("Este servicio tiene turnos asociados y debe conservarse en el historial. Podés desactivarlo para que no aparezca al reservar.");
+      }else{
+        alert("No se pudo eliminar el servicio.");
+      }
+      return;
+    }
+    await loadAdminData(); await loadPublicData();
+  }else{
+    db.services=db.services.filter(function(x){return String(x.id)!==String(id);});
+    saveLocal();
+  }
+  renderAll();
+};
 window.addPro=async function(){
   const n=$("newProName").value.trim();
   const active=$("newProActive").value==="1";
@@ -635,11 +682,33 @@ window.togglePro=async function(id){
 function renderAdminAgenda(){
   const el=$("adminAgenda"); if(!el) return;
   if(cloud && adminReady){
+    const goal=Math.max(2,Number(db.settings&&db.settings.clubGoal)||10);
+    const paidTarget=goal-1;
     el.innerHTML=cloudAppointments.length ? cloudAppointments.map(function(a){
       const service=a.services && a.services.name ? a.services.name : "Servicio";
       const pro=a.professionals && a.professionals.name ? a.professionals.name : "Profesional";
       const dur=Number(a.duration_minutes||30);
-      return '<div class="appt"><b>'+formatDate(a.appointment_date)+'</b><b>'+String(a.appointment_time).slice(0,5)+'</b><div><strong>'+escapeHtml(a.client_name)+'</strong><div class="muted">'+escapeHtml(service)+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.appointment_time,dur)+' · '+escapeHtml(pro)+' · '+escapeHtml(a.client_whatsapp)+'</div></div><button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button></div>';
+      const client=a.clients||{};
+      const stamps=Number(client.stamps||0);
+      const reward=!!client.reward_available;
+      let loyalty=reward
+        ? '<div class="loyalty-meta"><span class="status-pill reward">Beneficio disponible</span></div>'
+        : '<div class="loyalty-meta">Club: '+stamps+' de '+paidTarget+' visitas validadas</div>';
+      let actions='<div class="appt-actions">';
+      if(a.status==="confirmed"){
+        actions += reward
+          ? '<button class="btn primary small" onclick="redeemReward(\''+a.id+'\')">Canjear beneficio</button>'
+          : '<button class="btn primary small" onclick="validateVisit(\''+a.id+'\')">Validar visita</button>';
+        actions += '<button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button>';
+      }else if(a.status==="completed"){
+        actions += '<span class="status-pill ok">Atendido</span>';
+      }else if(a.status==="cancelled"){
+        actions += '<span class="status-pill">Cancelado</span>';
+      }else{
+        actions += '<span class="status-pill">'+escapeHtml(a.status)+'</span>';
+      }
+      actions+='</div>';
+      return '<div class="appt"><b>'+formatDate(a.appointment_date)+'</b><b>'+String(a.appointment_time).slice(0,5)+'</b><div><strong>'+escapeHtml(a.client_name)+'</strong><div class="muted">'+escapeHtml(service)+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.appointment_time,dur)+' · '+escapeHtml(pro)+' · '+escapeHtml(a.client_whatsapp)+'</div>'+loyalty+'</div>'+actions+'</div>';
     }).join("") : '<div class="notice">No hay turnos próximos.</div>';
     return;
   }
@@ -649,6 +718,25 @@ function renderAdminAgenda(){
     return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+escapeHtml(a.name)+'</strong><div class="muted">'+escapeHtml(a.service)+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.time,dur)+' · '+escapeHtml(a.pro)+' · '+escapeHtml(a.wa)+'</div></div><button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button></div>';
   }).join("") : '<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
 }
+window.validateVisit=async function(id){
+  if(!confirm("¿Confirmar que el cliente fue atendido? Esto sumará un sello al Club Barshi.")) return;
+  const res=await supa.rpc("validate_appointment_visit",{p_appointment_id:id});
+  if(res.error) return alert(res.error.message||"No se pudo validar la visita.");
+  const row=(res.data||[])[0]||{};
+  await loadAdminData();
+  if(row.reward_available){
+    alert("Visita validada. El cliente ya tiene disponible su beneficio del Club Barshi.");
+  }else{
+    alert("Visita validada. Sello agregado.");
+  }
+};
+window.redeemReward=async function(id){
+  if(!confirm("¿Canjear el beneficio del Club Barshi en este turno? Los sellos se reiniciarán.")) return;
+  const res=await supa.rpc("redeem_appointment_reward",{p_appointment_id:id});
+  if(res.error) return alert(res.error.message||"No se pudo canjear el beneficio.");
+  await loadAdminData();
+  alert("Beneficio canjeado. El contador de sellos volvió a cero.");
+};
 window.cancelAppointment=async function(id){
   if(!confirm("¿Cancelar este turno?")) return;
   if(cloud){
@@ -676,6 +764,133 @@ window.saveWa=async function(){
   alert("Configuración guardada.");
 };
 
+
+function renderClubPublic(){
+  const s=db.settings||{};
+  const section=$("clubSection");
+  if(section) section.classList.toggle("hidden",s.clubEnabled===false);
+  if($("clubLabel")) $("clubLabel").textContent=s.clubLabel||"CLUB BARSHI";
+  if($("clubTitle")) $("clubTitle").textContent=s.clubTitle||"";
+  if($("clubLegend")) $("clubLegend").textContent=s.clubLegend||"";
+  const stamps=$("clubStamps");
+  if(stamps){
+    const goal=Math.max(2,Math.min(50,Number(s.clubGoal)||10));
+    let html="";
+    for(let i=1;i<goal;i++) html+='<div class="stamp">'+i+'</div>';
+    html+='<div class="stamp">'+escapeHtml(s.clubRewardText||"GRATIS")+'</div>';
+    stamps.style.gridTemplateColumns='repeat('+Math.min(goal,10)+',1fr)';
+    stamps.innerHTML=html;
+  }
+  const badge=document.querySelector(".badges .club-badge");
+  if(badge){
+    badge.textContent="★ "+(s.clubBadgeText||"");
+    badge.classList.toggle("hidden",s.clubEnabled===false || !s.clubBadgeText);
+  }
+  const promos=(db.promotions||[]).filter(function(p){return p.active!==false;});
+  const promoSection=$("promotionsSection"), promoGrid=$("publicPromotions");
+  if(promoSection) promoSection.classList.toggle("hidden",promos.length===0);
+  if(promoGrid) promoGrid.innerHTML=promos.map(function(p){
+    return '<article class="promo-card"><h4>'+escapeHtml(p.title)+'</h4><p>'+escapeHtml(p.description||"")+'</p></article>';
+  }).join("");
+}
+function renderClubAdmin(){
+  const s=db.settings||{};
+  if($("clubEnabled")) $("clubEnabled").checked=s.clubEnabled!==false;
+  if($("clubLabelInput")) $("clubLabelInput").value=s.clubLabel||"";
+  if($("clubTitleInput")) $("clubTitleInput").value=s.clubTitle||"";
+  if($("clubLegendInput")) $("clubLegendInput").value=s.clubLegend||"";
+  if($("clubGoal")) $("clubGoal").value=String(s.clubGoal||10);
+  if($("clubRewardText")) $("clubRewardText").value=s.clubRewardText||"";
+  if($("clubBadgeText")) $("clubBadgeText").value=s.clubBadgeText||"";
+}
+window.saveClubSettings=async function(){
+  const payload={
+    club_enabled:$("clubEnabled").checked,
+    club_label:$("clubLabelInput").value.trim()||"CLUB BARSHI",
+    club_title:$("clubTitleInput").value.trim(),
+    club_legend:$("clubLegendInput").value.trim(),
+    club_goal:Math.max(2,Math.min(50,Number($("clubGoal").value)||10)),
+    club_reward_text:$("clubRewardText").value.trim()||"GRATIS",
+    club_badge_text:$("clubBadgeText").value.trim(),
+    updated_at:new Date().toISOString()
+  };
+  if(cloud){
+    const res=await supa.from("settings").update(payload).eq("id",1);
+    if(res.error) return alert("No se pudo guardar el Club Barshi.");
+    await loadAdminData(); await loadPublicData();
+  }else{
+    Object.assign(db.settings,{
+      clubEnabled:payload.club_enabled,clubLabel:payload.club_label,clubTitle:payload.club_title,
+      clubLegend:payload.club_legend,clubGoal:payload.club_goal,clubRewardText:payload.club_reward_text,
+      clubBadgeText:payload.club_badge_text
+    });
+    saveLocal();
+  }
+  renderAll();
+  alert("Club Barshi actualizado.");
+};
+function renderPromotionsAdmin(){
+  const el=$("adminPromotions"); if(!el) return;
+  const promos=cloud&&adminReady?cloudPromotions:(db.promotions||[]);
+  el.innerHTML=promos.length ? promos.map(function(p){
+    return '<div class="admin-item"><strong>'+escapeHtml(p.title)+'</strong>'+
+      '<span style="color:var(--muted)">'+escapeHtml(p.description||"")+'</span>'+
+      '<div class="admin-actions"><button class="btn secondary small" onclick="editPromotion(\''+p.id+'\')">Editar</button>'+
+      '<button class="btn secondary small" onclick="togglePromotion(\''+p.id+'\')">'+(p.active?"Ocultar":"Publicar")+'</button>'+
+      '<button class="btn danger small" onclick="deletePromotion(\''+p.id+'\')">Eliminar</button></div></div>';
+  }).join("") : '<div class="notice">No hay promociones adicionales cargadas.</div>';
+}
+window.addPromotion=async function(){
+  const title=$("newPromoTitle").value.trim();
+  const description=$("newPromoDesc").value.trim();
+  const active=$("newPromoActive").value==="1";
+  if(!title) return alert("Escribí el título de la promoción.");
+  if(cloud){
+    const res=await supa.from("promotions").insert({title:title,description:description,active:active});
+    if(res.error) return alert("No se pudo agregar la promoción.");
+    await loadAdminData(); await loadPublicData();
+  }else{
+    db.promotions.push({id:Date.now(),title:title,description:description,active:active});saveLocal();
+  }
+  $("newPromoTitle").value="";$("newPromoDesc").value="";
+  renderAll();
+};
+window.editPromotion=async function(id){
+  const list=cloud&&adminReady?cloudPromotions:(db.promotions||[]);
+  const p=list.find(function(x){return String(x.id)===String(id);}); if(!p) return;
+  const title=prompt("Título de la promoción",p.title); if(title===null) return;
+  const description=prompt("Descripción / condiciones",p.description||""); if(description===null) return;
+  if(!title.trim()) return alert("El título no puede quedar vacío.");
+  if(cloud){
+    const res=await supa.from("promotions").update({title:title.trim(),description:description.trim(),updated_at:new Date().toISOString()}).eq("id",id);
+    if(res.error) return alert("No se pudo actualizar.");
+    await loadAdminData(); await loadPublicData();
+  }else{
+    p.title=title.trim();p.description=description.trim();saveLocal();
+  }
+  renderAll();
+};
+window.togglePromotion=async function(id){
+  const list=cloud&&adminReady?cloudPromotions:(db.promotions||[]);
+  const p=list.find(function(x){return String(x.id)===String(id);}); if(!p) return;
+  if(cloud){
+    const res=await supa.from("promotions").update({active:!p.active,updated_at:new Date().toISOString()}).eq("id",id);
+    if(res.error) return alert("No se pudo actualizar.");
+    await loadAdminData(); await loadPublicData();
+  }else{p.active=!p.active;saveLocal();}
+  renderAll();
+};
+window.deletePromotion=async function(id){
+  if(!confirm("¿Eliminar esta promoción?")) return;
+  if(cloud){
+    const res=await supa.from("promotions").delete().eq("id",id);
+    if(res.error) return alert("No se pudo eliminar.");
+    await loadAdminData(); await loadPublicData();
+  }else{
+    db.promotions=(db.promotions||[]).filter(function(p){return String(p.id)!==String(id);});saveLocal();
+  }
+  renderAll();
+};
 
 function applyPublicBusinessInfo(){
   const s=db.settings||{};
