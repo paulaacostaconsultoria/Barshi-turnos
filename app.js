@@ -529,7 +529,7 @@ async function loadAdminData(){
     supa.from("services").select("*").order("sort_order"),
     supa.from("professionals").select("*").order("name"),
     supa.from("appointments")
-      .select("id,client_id,appointment_date,appointment_time,duration_minutes,status,client_name,client_whatsapp,service_id,professional_id,services(name),professionals(name),clients(stamps,reward_available)")
+      .select("id,client_id,appointment_date,appointment_time,duration_minutes,status,client_name,client_whatsapp,service_id,professional_id,services(name),professionals(name),clients(stamps,reward_available,club_access_token)")
       .gte("appointment_date",dateKey(new Date()))
       .order("appointment_date",{ascending:true})
       .order("appointment_time",{ascending:true}),
@@ -700,8 +700,10 @@ function renderAdminAgenda(){
         actions += reward
           ? '<button class="btn primary small" onclick="redeemReward(\''+a.id+'\')">Canjear beneficio</button>'
           : '<button class="btn primary small" onclick="validateVisit(\''+a.id+'\')">Validar visita</button>';
+        actions += '<button class="btn secondary small" onclick="shareClub(\''+a.id+'\')">Enviar Mi Club</button>';
         actions += '<button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button>';
       }else if(a.status==="completed"){
+        actions += '<button class="btn secondary small" onclick="shareClub(\''+a.id+'\')">Enviar Mi Club</button>';
         actions += '<span class="status-pill ok">Atendido</span>';
       }else if(a.status==="cancelled"){
         actions += '<span class="status-pill">Cancelado</span>';
@@ -719,6 +721,31 @@ function renderAdminAgenda(){
     return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+escapeHtml(a.name)+'</strong><div class="muted">'+escapeHtml(a.service)+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.time,dur)+' · '+escapeHtml(a.pro)+' · '+escapeHtml(a.wa)+'</div></div><button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button></div>';
   }).join("") : '<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
 }
+function normalizeClientWhatsapp(v){
+  let d=String(v||"").replace(/\D/g,"");
+  if(d.startsWith("00")) d=d.slice(2);
+  if(d.startsWith("54")) return d;
+  if(d.length===10) return "549"+d;
+  return d;
+}
+window.shareClub=function(id){
+  const appt=(cloudAppointments||[]).find(function(x){return String(x.id)===String(id);});
+  if(!appt) return alert("No encontramos ese turno.");
+  const token=appt.clients&&appt.clients.club_access_token;
+  if(!token) return alert("Todavía no hay un enlace de Club disponible para este cliente.");
+  const base=location.origin.replace(/\/$/,"");
+  const link=base+"/club.html?t="+token;
+  const first=String(appt.client_name||"").trim().split(/\s+/)[0]||"";
+  const msg="Hola "+first+" 👋\n\nTe dejamos tu acceso privado a Mi Club Barshi. Desde acá podés ver tus sellos reales, tu beneficio y tu próximo turno:\n\n"+link+"\n\nGuardalo, porque es tu enlace personal.";
+  const number=normalizeClientWhatsapp(appt.client_whatsapp);
+  if(number && number.length>=10){
+    window.open("https://wa.me/"+number+"?text="+encodeURIComponent(msg),"_blank","noopener");
+  }else if(navigator.clipboard){
+    navigator.clipboard.writeText(link).then(function(){alert("Copiamos el enlace de Mi Club. Podés enviárselo por WhatsApp.");});
+  }else{
+    prompt("Copiá este enlace y envialo al cliente:",link);
+  }
+};
 window.validateVisit=async function(id){
   if(!confirm("¿Confirmar que el cliente fue atendido? Esto sumará un sello al Club Barshi.")) return;
   const res=await supa.rpc("validate_appointment_visit",{p_appointment_id:id});
