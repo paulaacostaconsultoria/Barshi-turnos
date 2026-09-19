@@ -597,3 +597,173 @@ drop policy if exists "admin schedule blocks" on public.schedule_blocks;
 create policy "admin schedule blocks" on public.schedule_blocks for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
 
 drop function if exists public.is_admin();
+
+
+-- Club Barshi, promociones y validación de visitas.
+
+alter table public.settings
+  add column if not exists club_enabled boolean not null default true,
+  add column if not exists club_label text not null default 'CLUB BARSHI',
+  add column if not exists club_title text not null default 'Nueve visitas. La décima, por la casa.',
+  add column if not exists club_legend text not null default 'Reservá siempre con el mismo WhatsApp. Barshi valida un sello después de cada corte.',
+  add column if not exists club_goal integer not null default 10,
+  add column if not exists club_reward_text text not null default 'GRATIS',
+  add column if not exists club_badge_text text not null default 'El 10.º corte es gratis';
+
+alter table public.clients
+  add column if not exists reward_available boolean not null default false;
+
+alter table public.clients drop constraint if exists clients_stamps_check;
+alter table public.clients
+  add constraint clients_stamps_check check (stamps >= 0 and stamps <= 1000);
+
+create table if not exists public.promotions (
+  id uuid primary key default gen_random_uuid(),
+  title text not null,
+  description text not null default '',
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.promotions enable row level security;
+
+revoke all on public.promotions from anon, authenticated;
+grant select on public.promotions to anon, authenticated;
+grant insert, update, delete on public.promotions to authenticated;
+
+drop policy if exists "promotions select" on public.promotions;
+create policy "promotions select"
+on public.promotions for select to anon, authenticated
+using (
+  active
+  or exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+);
+
+drop policy if exists "promotions insert admin" on public.promotions;
+create policy "promotions insert admin"
+on public.promotions for insert to authenticated
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "promotions update admin" on public.promotions;
+create policy "promotions update admin"
+on public.promotions for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "promotions delete admin" on public.promotions;
+create policy "promotions delete admin"
+on public.promotions for delete to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "admin clients" on public.clients;
+create policy "admin clients"
+on public.clients for all to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "admin appointments" on public.appointments;
+create policy "admin appointments"
+on public.appointments for all to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "admin settings" on public.settings;
+create policy "admin settings"
+on public.settings for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "admin schedule blocks" on public.schedule_blocks;
+create policy "admin schedule blocks"
+on public.schedule_blocks for all to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+create or replace function public.validate_appointment_visit(p_appointment_id uuid)
+returns table(stamps integer, reward_available boolean, club_goal integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_client uuid;
+  v_status text;
+  v_goal integer;
+  v_stamps integer;
+  v_reward boolean;
+begin
+  if not exists (select 1 from public.admin_users au where au.user_id = auth.uid()) then
+    raise exception 'Sin permisos de administración';
+  end if;
+
+  select a.client_id, a.status into v_client, v_status
+  from public.appointments a where a.id = p_appointment_id for update;
+
+  if v_client is null then raise exception 'Turno sin cliente asociado'; end if;
+  if v_status = 'cancelled' then raise exception 'No se puede validar un turno cancelado'; end if;
+
+  select greatest(club_goal,2) into v_goal from public.settings where id=1;
+  select c.stamps, c.reward_available into v_stamps, v_reward
+  from public.clients c where c.id=v_client for update;
+
+  if v_status <> 'completed' then
+    update public.appointments set status='completed' where id=p_appointment_id;
+    if not v_reward then
+      v_stamps := least(v_stamps + 1, v_goal - 1);
+      if v_stamps >= v_goal - 1 then v_reward := true; end if;
+      update public.clients
+      set stamps=v_stamps, reward_available=v_reward, updated_at=now()
+      where id=v_client;
+    end if;
+  end if;
+
+  return query select v_stamps, v_reward, v_goal;
+end;
+$$;
+
+create or replace function public.redeem_appointment_reward(p_appointment_id uuid)
+returns table(stamps integer, reward_available boolean)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_client uuid;
+  v_status text;
+  v_reward boolean;
+begin
+  if not exists (select 1 from public.admin_users au where au.user_id = auth.uid()) then
+    raise exception 'Sin permisos de administración';
+  end if;
+
+  select a.client_id, a.status into v_client, v_status
+  from public.appointments a where a.id=p_appointment_id for update;
+
+  if v_client is null then raise exception 'Turno sin cliente asociado'; end if;
+  if v_status='cancelled' then raise exception 'No se puede canjear en un turno cancelado'; end if;
+
+  select c.reward_available into v_reward
+  from public.clients c where c.id=v_client for update;
+
+  if not coalesce(v_reward,false) then
+    raise exception 'El cliente todavía no tiene un beneficio disponible';
+  end if;
+
+  update public.appointments set status='completed' where id=p_appointment_id;
+  update public.clients
+  set stamps=0, reward_available=false, updated_at=now()
+  where id=v_client;
+
+  return query select 0, false;
+end;
+$$;
+
+revoke execute on function public.validate_appointment_visit(uuid) from public, anon;
+revoke execute on function public.redeem_appointment_reward(uuid) from public, anon;
+grant execute on function public.validate_appointment_visit(uuid) to authenticated;
+grant execute on function public.redeem_appointment_reward(uuid) to authenticated;
+
+create index if not exists idx_promotions_active_sort
+on public.promotions(active, sort_order);
