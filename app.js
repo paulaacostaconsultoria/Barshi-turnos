@@ -908,19 +908,9 @@ function renderAdminAgenda(){
       return (x.appointment_date+String(x.appointment_time)).localeCompare(y.appointment_date+String(y.appointment_time));
     });
 
-    const history=cloudAppointments.filter(function(a){
-      return !(a.appointment_date>=today && a.status==="confirmed");
-    }).sort(function(x,y){
-      return (y.appointment_date+String(y.appointment_time)).localeCompare(x.appointment_date+String(x.appointment_time));
-    });
-
     let html='';
     html+='<div class="section-title" style="margin-top:4px"><h3>Próximos turnos</h3><span>'+upcoming.length+'</span></div>';
     html+=upcoming.length?upcoming.map(appointmentCard).join(""):'<div class="notice">No hay próximos turnos confirmados.</div>';
-
-    html+='<div class="section-title" style="margin-top:22px"><h3>Historial reciente</h3><span>Últimos 30 días</span></div>';
-    html+=history.length?history.map(appointmentCard).join(""):'<div class="notice">Todavía no hay visitas recientes.</div>';
-
     el.innerHTML=html;
     return;
   }
