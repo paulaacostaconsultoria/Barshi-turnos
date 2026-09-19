@@ -32,6 +32,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 .agenda-table{display:grid;gap:8px}
 .appt{display:grid;grid-template-columns:90px 70px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px;background:#190a0c}
 .appt .muted{color:var(--muted);font-size:12px}
+.history-list{display:grid;gap:8px}.history-row{display:grid;grid-template-columns:105px 70px minmax(160px,1.4fr) minmax(130px,1fr) minmax(120px,1fr) 110px;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:11px;background:#190a0c}.history-head{background:#120708;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em}.history-client strong{display:block}.history-client small,.history-cell small{display:block;color:var(--muted);margin-top:3px}.history-stamps{font-weight:800;color:var(--gold)}
 .auth-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:18px;z-index:40}
 .auth-card{width:min(420px,100%);background:#16090b;border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
 .auth-card h3{margin:4px 0 8px;font-size:26px}
@@ -58,7 +59,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 .inline-check{display:flex;align-items:center;gap:8px;color:var(--text);margin:2px 0 0}
 .inline-check input{width:auto;min-height:auto}
 .admin-savebar{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
-@media(max-width:760px){.wrap{padding:12px}.top{align-items:flex-start}.grid{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.promo-grid{grid-template-columns:1fr}.steps{grid-template-columns:repeat(5,1fr);gap:5px;position:sticky;top:0;z-index:5;background:#1b0b0e;padding:6px;border-radius:12px}.step{font-size:0;padding:8px 4px;min-height:34px}.step::after{content:attr(data-n);font-size:12px}.brand{gap:10px}.brand-logo-img{width:150px;max-width:48vw;height:auto}.brand h1{font-size:18px}.admin-btn{padding:9px 11px;font-size:13px}.hero{padding:24px 0 14px}.hero h2{font-size:36px}.card{padding:15px;border-radius:18px}.choice{padding:15px;min-height:92px}.btn{min-height:46px}input,select{min-height:48px;font-size:16px}.actions{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,#14080a 30%);padding-top:20px;z-index:4}.actions .btn{flex:1}.stamps{grid-template-columns:repeat(5,1fr)}.inline-form{grid-template-columns:1fr}.panel{padding:14px;width:100%;border-left:0}.settings-grid,.block-form{grid-template-columns:1fr}.settings-grid .full{grid-column:auto}.logo-admin{grid-template-columns:1fr}.logo-preview{width:150px}.hours-row{grid-template-columns:1fr 1fr}.hours-row label{grid-column:1/-1}.block-item{grid-template-columns:1fr}.agenda-days{grid-template-columns:repeat(5,minmax(92px,1fr))}.slots{grid-template-columns:repeat(3,1fr)}.appt{grid-template-columns:1fr 1fr}.appt>div{grid-column:1/-1}.appt-actions{grid-column:1/-1;justify-content:stretch}.appt-actions .btn{flex:1}}}
+@media(max-width:760px){.wrap{padding:12px}.top{align-items:flex-start}.grid{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.promo-grid{grid-template-columns:1fr}.steps{grid-template-columns:repeat(5,1fr);gap:5px;position:sticky;top:0;z-index:5;background:#1b0b0e;padding:6px;border-radius:12px}.step{font-size:0;padding:8px 4px;min-height:34px}.step::after{content:attr(data-n);font-size:12px}.brand{gap:10px}.brand-logo-img{width:150px;max-width:48vw;height:auto}.brand h1{font-size:18px}.admin-btn{padding:9px 11px;font-size:13px}.hero{padding:24px 0 14px}.hero h2{font-size:36px}.card{padding:15px;border-radius:18px}.choice{padding:15px;min-height:92px}.btn{min-height:46px}input,select{min-height:48px;font-size:16px}.actions{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,#14080a 30%);padding-top:20px;z-index:4}.actions .btn{flex:1}.stamps{grid-template-columns:repeat(5,1fr)}.inline-form{grid-template-columns:1fr}.panel{padding:14px;width:100%;border-left:0}.settings-grid,.block-form{grid-template-columns:1fr}.settings-grid .full{grid-column:auto}.logo-admin{grid-template-columns:1fr}.logo-preview{width:150px}.hours-row{grid-template-columns:1fr 1fr}.hours-row label{grid-column:1/-1}.block-item{grid-template-columns:1fr}.agenda-days{grid-template-columns:repeat(5,minmax(92px,1fr))}.slots{grid-template-columns:repeat(3,1fr)}.appt{grid-template-columns:1fr 1fr}.appt>div{grid-column:1/-1}.appt-actions{grid-column:1/-1;justify-content:stretch}.appt-actions .btn{flex:1}.history-head{display:none}.history-row{grid-template-columns:1fr 1fr}.history-client{grid-column:1/-1}.history-cell{min-width:0}.history-cell:before{content:attr(data-label);display:block;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}}}
 @media(max-width:420px){.wrap{padding:10px}.top{gap:8px;align-items:center}.brand p{font-size:12px}.hero h2{font-size:32px}.section-title{align-items:flex-start;flex-direction:column}.section-title h3{font-size:21px}.row{font-size:14px}}
 </style>
 </head>
@@ -121,6 +122,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 </div>
 <div class="drawer" id="drawer" onclick="if(event.target===this) closeAdmin()"><aside class="panel"><div class="panel-head"><div><div class="kicker">PANEL BARSHI</div><h2 style="margin:4px 0">Administración</h2></div><div style="display:flex;gap:8px"><button id="logoutBtn" class="admin-btn hidden" onclick="adminLogout()">Salir</button><button class="admin-btn" onclick="closeAdmin()">Cerrar</button></div></div><div class="tabs">
   <button class="tab on" onclick="tab('agenda',this)">Agenda</button>
+  <button class="tab" onclick="tab('history',this)">Historial</button>
   <button class="tab" onclick="tab('services',this)">Servicios</button>
   <button class="tab" onclick="tab('pros',this)">Profesionales</button>
   <button class="tab" onclick="tab('hours',this)">Horarios</button>
@@ -148,6 +150,24 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
   </div>
 
   <div class="agenda-table" id="adminAgenda"></div>
+</div>
+
+<div id="tab-history" class="hidden">
+  <div class="section-title"><h3>Historial de atención</h3><span id="historyCount">0 visitas</span></div>
+  <div class="admin-section">
+    <div class="settings-grid">
+      <div>
+        <label for="historySearch">Buscar cliente</label>
+        <input id="historySearch" placeholder="Nombre o WhatsApp" oninput="renderAdminHistory()">
+      </div>
+      <div>
+        <label for="historyProfessional">Profesional</label>
+        <select id="historyProfessional" onchange="renderAdminHistory()"><option value="">Todos</option></select>
+      </div>
+    </div>
+    <div class="field-help">Muestra las visitas marcadas como atendidas. Los sellos corresponden al saldo actual de cada cliente.</div>
+  </div>
+  <div class="history-list" id="adminHistory"></div>
 </div>
 
 <div id="tab-hours" class="hidden">
@@ -301,7 +321,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js?v=20260919-7"></script>
-<script src="./app.js?v=20260919-16"></script>
+<script src="./app.js?v=20260919-17"></script>
 <!-- deploy-refresh-2026-09-18 -->
 </body>
 </html>
