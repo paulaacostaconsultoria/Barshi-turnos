@@ -873,3 +873,119 @@ $$;
 
 revoke all on function public.rotate_club_access_token(uuid) from public, anon;
 grant execute on function public.rotate_club_access_token(uuid) to authenticated;
+
+
+-- Registro manual de visitas anteriores
+create or replace function public.register_manual_visit(
+  p_client_name text,
+  p_client_whatsapp text,
+  p_service_id uuid,
+  p_professional_id uuid,
+  p_date date,
+  p_time time default '12:00'::time
+)
+returns table(
+  appointment_id uuid,
+  stamps integer,
+  reward_available boolean,
+  club_goal integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_client uuid;
+  v_duration integer;
+  v_goal integer;
+  v_stamps integer;
+  v_reward boolean;
+  v_appt uuid;
+  v_today date := (now() at time zone 'America/Argentina/Buenos_Aires')::date;
+  v_now_time time := (now() at time zone 'America/Argentina/Buenos_Aires')::time;
+begin
+  if not exists (
+    select 1 from public.admin_users au
+    where au.user_id = auth.uid()
+  ) then
+    raise exception 'Sin permisos de administración';
+  end if;
+
+  if nullif(trim(p_client_name),'') is null
+     or nullif(trim(p_client_whatsapp),'') is null then
+    raise exception 'Nombre y WhatsApp son obligatorios';
+  end if;
+
+  if p_date > v_today then
+    raise exception 'La visita manual no puede ser futura';
+  end if;
+
+  if p_date = v_today and p_time > v_now_time then
+    raise exception 'La hora de una visita manual de hoy no puede ser futura';
+  end if;
+
+  select s.duration_minutes
+  into v_duration
+  from public.services s
+  where s.id=p_service_id;
+
+  if v_duration is null then
+    raise exception 'Servicio no encontrado';
+  end if;
+
+  if not exists (
+    select 1 from public.professionals p
+    where p.id=p_professional_id
+  ) then
+    raise exception 'Profesional no encontrado';
+  end if;
+
+  insert into public.clients(full_name, whatsapp)
+  values(trim(p_client_name), trim(p_client_whatsapp))
+  on conflict (whatsapp)
+  do update set
+    full_name=excluded.full_name,
+    updated_at=now()
+  returning id into v_client;
+
+  insert into public.appointments(
+    client_id, client_name, client_whatsapp, service_id, professional_id,
+    appointment_date, appointment_time, duration_minutes, status
+  )
+  values(
+    v_client, trim(p_client_name), trim(p_client_whatsapp),
+    p_service_id, p_professional_id, p_date, coalesce(p_time,'12:00'::time),
+    v_duration, 'completed'
+  )
+  returning id into v_appt;
+
+  select greatest(s.club_goal,2)
+  into v_goal
+  from public.settings s
+  where s.id=1;
+
+  select c.stamps, c.reward_available
+  into v_stamps, v_reward
+  from public.clients c
+  where c.id=v_client
+  for update;
+
+  if not v_reward then
+    v_stamps := least(v_stamps + 1, v_goal - 1);
+    if v_stamps >= v_goal - 1 then
+      v_reward := true;
+    end if;
+
+    update public.clients
+    set stamps=v_stamps,
+        reward_available=v_reward,
+        updated_at=now()
+    where id=v_client;
+  end if;
+
+  return query select v_appt, v_stamps, v_reward, v_goal;
+end;
+$$;
+
+revoke all on function public.register_manual_visit(text,text,uuid,uuid,date,time) from public, anon;
+grant execute on function public.register_manual_visit(text,text,uuid,uuid,date,time) to authenticated;
