@@ -1,6 +1,6 @@
 // Configuración pública de Supabase para BARSHI.
-// La URL y la publishable key son seguras para el navegador cuando RLS está correctamente configurado.
+// Esta clave es publishable y está protegida por RLS en Supabase.
 window.BARSHI_SUPABASE = {
-  url: "",
-  publishableKey: ""
+  url: "https://vzpeofhmqrumcgwzwkkr.supabase.co",
+  publishableKey: "sb_publishable_p8C4f1CPFc5nSn7c-zVTHA_qYzcLYzn"
 };
