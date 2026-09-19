@@ -9,6 +9,7 @@ const CLOSE_MIN = 20*60;
 const SLOT_STEP = 15;
 const CLEANING_BUFFER = 15;
 const CLUB_STAMP_LOGO = "./assets/barshi-isotipo.svg";
+const PUSH_PUBLIC_KEY = "BA3EKQf4ha73WaDVyazcW9h2dIlE9uomUKEQzU8-GasJSsqikioeaDGV3Io40CTTAAyABAPpMnLIUwzsuc6YdM0";
 const SUPABASE_FALLBACK = {
   url: "https://vzpeofhmqrumcgwzwkkr.supabase.co",
   publishableKey: "sb_publishable_p8C4f1CPFc5nSn7c-zVTHA_qYzcLYzn"
@@ -175,7 +176,109 @@ function upcomingBusinessDays(){
   return out;
 }
 
+function urlBase64ToUint8Array(base64String){
+  const padding="=".repeat((4-base64String.length%4)%4);
+  const base64=(base64String+padding).replace(/-/g,"+").replace(/_/g,"/");
+  const raw=atob(base64);
+  const output=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) output[i]=raw.charCodeAt(i);
+  return output;
+}
+async function registerPushWorker(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  try{
+    return await navigator.serviceWorker.register("/push-sw.js");
+  }catch(e){
+    console.warn("No se pudo registrar el service worker",e);
+    return null;
+  }
+}
+async function updatePushNotificationStatus(){
+  const el=$("pushStatus");
+  if(!el) return;
+  if(!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)){
+    el.textContent="Este navegador no permite notificaciones push.";
+    return;
+  }
+  if(Notification.permission==="denied"){
+    el.textContent="Las notificaciones están bloqueadas en este celular. Habilitalas desde los permisos del navegador.";
+    return;
+  }
+  if(Notification.permission!=="granted"){
+    el.textContent="Notificaciones todavía no activadas en este celular.";
+    return;
+  }
+  const reg=await registerPushWorker();
+  const sub=reg ? await reg.pushManager.getSubscription() : null;
+  el.textContent=sub ? "✓ Notificaciones activas en este celular." : "Permiso concedido. Tocá Activar para terminar la configuración.";
+}
+window.enablePushNotifications=async function(){
+  if(!cloud || !adminReady) return alert("Ingresá primero al panel de Barshi.");
+  if(!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)){
+    return alert("Este navegador no permite notificaciones push.");
+  }
+  let permission=Notification.permission;
+  if(permission!=="granted") permission=await Notification.requestPermission();
+  if(permission!=="granted"){
+    await updatePushNotificationStatus();
+    return alert("Para recibir nuevas reservas necesitás permitir las notificaciones.");
+  }
+  const reg=await registerPushWorker();
+  if(!reg) return alert("No pudimos activar las notificaciones en este celular.");
+  let sub=await reg.pushManager.getSubscription();
+  if(!sub){
+    sub=await reg.pushManager.subscribe({
+      userVisibleOnly:true,
+      applicationServerKey:urlBase64ToUint8Array(PUSH_PUBLIC_KEY)
+    });
+  }
+  const json=sub.toJSON();
+  const sessionRes=await supa.auth.getSession();
+  const user=sessionRes.data.session&&sessionRes.data.session.user;
+  if(!user) return alert("Tu sesión de administración venció. Volvé a ingresar.");
+  const res=await supa.from("admin_push_subscriptions").upsert({
+    user_id:user.id,
+    endpoint:sub.endpoint,
+    p256dh:json.keys&&json.keys.p256dh,
+    auth:json.keys&&json.keys.auth,
+    updated_at:new Date().toISOString()
+  },{onConflict:"endpoint"});
+  if(res.error){
+    console.error(res.error);
+    return alert("No pudimos guardar la suscripción de notificaciones.");
+  }
+  await updatePushNotificationStatus();
+  alert("Listo. Este celular recibirá un aviso inmediato cuando entre una nueva reserva.");
+};
+window.disablePushNotifications=async function(){
+  if(!("serviceWorker" in navigator)) return;
+  const reg=await navigator.serviceWorker.getRegistration("/push-sw.js");
+  const sub=reg ? await reg.pushManager.getSubscription() : null;
+  if(sub && cloud && adminReady){
+    await supa.from("admin_push_subscriptions").delete().eq("endpoint",sub.endpoint);
+  }
+  if(sub) await sub.unsubscribe();
+  await updatePushNotificationStatus();
+};
+async function triggerAdminPush(appointmentId){
+  if(!appointmentId || !cloud) return;
+  const c=getSupabaseConfig();
+  try{
+    await fetch(c.url+"/functions/v1/notify-booking",{
+      method:"POST",
+      headers:{
+        "Content-Type":"application/json",
+        "apikey":c.publishableKey
+      },
+      body:JSON.stringify({appointment_id:appointmentId})
+    });
+  }catch(e){
+    console.warn("No se pudo enviar la notificación de nueva reserva",e);
+  }
+}
+
 async function init(){
+  registerPushWorker();
   const initialLogo=$("brandLogo");
   if(initialLogo) defaultLogoSrc=initialLogo.src;
   if($("blockDate")) $("blockDate").min=dateKey(new Date());
@@ -407,6 +510,7 @@ window.confirmBooking=async function(){
     }
     const row=(res.data||[])[0];
     proName=row ? row.professional_name : (booking.pro==="any" ? "Profesional disponible" : booking.pro.name);
+    if(row && row.appointment_id) triggerAdminPush(row.appointment_id);
   }else{
     const duration=Number(booking.service.duration)||30;
     if(slotUnavailableLocal(booking.date,booking.time)){
@@ -523,6 +627,7 @@ window.tab=function(id,btn){
   document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on");});
   if(btn) btn.classList.add("on");
   if(id==="agenda") renderAdminAgenda();
+  if(id==="whatsapp") updatePushNotificationStatus();
 };
 
 async function loadAdminData(){
@@ -562,6 +667,7 @@ async function loadAdminData(){
   renderClubAdmin();
   renderPromotionsAdmin();
   applyPublicBusinessInfo();
+  updatePushNotificationStatus();
 }
 function renderAdmin(){
   const serviceEl=$("adminServices"), proEl=$("adminPros");
