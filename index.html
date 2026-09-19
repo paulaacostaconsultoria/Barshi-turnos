@@ -121,7 +121,22 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 <div id="tab-services" class="hidden"><div class="section-title"><h3>Servicios</h3><span>Agregar, editar o eliminar</span></div><div class="inline-form"><input id="newServiceName" placeholder="Nombre del servicio"><input id="newServicePrice" placeholder="Precio"><input id="newServiceDuration" placeholder="Duración (min)"><input id="newServiceDesc" placeholder="Descripción"></div><button class="btn primary" style="margin:10px 0 14px;width:100%" onclick="addService()">Agregar servicio</button><div class="admin-list" id="adminServices"></div></div>
 <div id="tab-pros" class="hidden"><div class="section-title"><h3>Profesionales</h3><span>Nombre y estado</span></div><div class="inline-form"><input id="newProName" placeholder="Nombre del profesional"><select id="newProActive"><option value="1">Activo</option><option value="0">Inactivo</option></select></div><button class="btn primary" style="margin:10px 0 14px;width:100%" onclick="addPro()">Agregar profesional</button><div class="admin-list" id="adminPros"></div></div>
 <div id="tab-agenda">
-  <div class="section-title"><h3>Agenda de turnos</h3><span>Reservas registradas</span></div>
+  <div class="section-title"><h3>Agenda de turnos</h3><span>Reservas e historial reciente</span></div>
+
+  <div class="admin-section">
+    <h4>Registrar visita anterior</h4>
+    <div class="field-help" style="margin-bottom:12px">Para clientes que fueron atendidos pero no reservaron por la app. La visita queda como atendida y suma el sello correspondiente.</div>
+    <div class="settings-grid">
+      <div><label for="manualVisitName">Nombre y apellido</label><input id="manualVisitName" placeholder="Ej. Juan Pérez"></div>
+      <div><label for="manualVisitWa">WhatsApp</label><input id="manualVisitWa" inputmode="tel" placeholder="Ej. 2494 123456"></div>
+      <div><label for="manualVisitService">Servicio</label><select id="manualVisitService"></select></div>
+      <div><label for="manualVisitPro">Profesional</label><select id="manualVisitPro"></select></div>
+      <div><label for="manualVisitDate">Fecha de la visita</label><input id="manualVisitDate" type="date"></div>
+      <div><label for="manualVisitTime">Hora aproximada</label><input id="manualVisitTime" type="time" value="12:00"></div>
+    </div>
+    <div class="admin-savebar"><button class="btn primary" onclick="registerManualVisit()">Registrar visita y sumar sello</button></div>
+  </div>
+
   <div class="agenda-table" id="adminAgenda"></div>
 </div>
 
@@ -256,7 +271,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js?v=20260919-7"></script>
-<script src="./app.js?v=20260919-10"></script>
+<script src="./app.js?v=20260919-11"></script>
 <!-- deploy-refresh-2026-09-18 -->
 </body>
 </html>
