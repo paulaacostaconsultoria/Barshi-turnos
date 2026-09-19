@@ -383,6 +383,7 @@ window.pickTime=function(t){ booking.time=t; renderAgendaPicker(); };
 window.confirmBooking=async function(){
   const nameEl=$("name"), waEl=$("wa");
   if(!nameEl.value.trim() || !waEl.value.trim()) return alert("Completá nombre y WhatsApp.");
+  if($("waConsent") && !$("waConsent").checked) return alert("Necesitamos tu autorización para enviarte la confirmación y el recordatorio por WhatsApp.");
   if(!booking.service || !booking.date || !booking.time) return alert("Falta seleccionar el turno.");
   booking.name=nameEl.value.trim(); booking.wa=waEl.value.trim();
 
@@ -452,6 +453,7 @@ window.resetBooking=function(){
   booking={service:null,pro:null,date:"",time:"",name:"",wa:""};
   if($("name")) $("name").value="";
   if($("wa")) $("wa").value="";
+  if($("waConsent")) $("waConsent").checked=false;
   renderAll(); go(1);
 };
 
@@ -680,6 +682,54 @@ window.togglePro=async function(id){
   }else{ p.active=!p.active; saveLocal(); }
   renderAll();
 };
+function whatsappClientNumber(v){
+  let d=String(v||"").replace(/\D/g,"");
+  if(d.startsWith("00")) d=d.slice(2);
+  if(d.startsWith("54")) return d;
+  // Argentina: para WhatsApp internacional, anteponemos 549 a números locales de 10 dígitos.
+  if(d.length===10) return "549"+d;
+  return d;
+}
+function appointmentDateTime(a){
+  return new Date(String(a.appointment_date)+"T"+String(a.appointment_time).slice(0,8));
+}
+function reminderHoursValue(){
+  return parseInt(String(db.wa&&db.wa.reminder||"24"),10)||24;
+}
+function reminderIsDue(a){
+  if(!a || a.status!=="confirmed") return false;
+  const diff=(appointmentDateTime(a).getTime()-Date.now())/3600000;
+  return diff>=0 && diff<=reminderHoursValue();
+}
+function composeConfirmation(a){
+  const service=a.services&&a.services.name?a.services.name:"tu servicio";
+  const pro=a.professionals&&a.professionals.name?a.professionals.name:"Barshi";
+  const address=[db.settings&&db.settings.address,db.settings&&db.settings.city].filter(Boolean).join(", ");
+  const clubToken=a.clients&&a.clients.club_access_token;
+  const clubLink=clubToken ? location.origin.replace(/\/$/,"")+"/club.html?t="+clubToken : "";
+  return "Hola "+String(a.client_name||"").trim().split(/\s+/)[0]+" 👋\n\nTe confirmamos tu turno en Barshi.\n\n✂️ "+service+"\n📅 "+formatDate(a.appointment_date)+"\n🕒 "+String(a.appointment_time).slice(0,5)+"\n👤 "+pro+(address?"\n📍 "+address:"")+(clubLink?"\n\nTu acceso privado a Mi Club Barshi:\n"+clubLink:"")+"\n\n¡Te esperamos!";
+}
+function composeReminder(a){
+  const service=a.services&&a.services.name?a.services.name:"tu servicio";
+  const pro=a.professionals&&a.professionals.name?a.professionals.name:"Barshi";
+  const address=[db.settings&&db.settings.address,db.settings&&db.settings.city].filter(Boolean).join(", ");
+  return "Hola "+String(a.client_name||"").trim().split(/\s+/)[0]+" 👋\n\nTe recordamos tu turno en Barshi.\n\n✂️ "+service+"\n📅 "+formatDate(a.appointment_date)+"\n🕒 "+String(a.appointment_time).slice(0,5)+"\n👤 "+pro+(address?"\n📍 "+address:"")+"\n\n¡Te esperamos!";
+}
+function openClientWhatsApp(a,message){
+  const n=whatsappClientNumber(a.client_whatsapp);
+  if(!n || n.length<10) return alert("Revisá el número de WhatsApp del cliente.");
+  window.open("https://wa.me/"+n+"?text="+encodeURIComponent(message),"_blank","noopener");
+}
+window.sendConfirmationWhatsApp=function(id){
+  const a=(cloudAppointments||[]).find(function(x){return String(x.id)===String(id);});
+  if(!a) return alert("No encontramos ese turno.");
+  openClientWhatsApp(a,composeConfirmation(a));
+};
+window.sendReminderWhatsApp=function(id){
+  const a=(cloudAppointments||[]).find(function(x){return String(x.id)===String(id);});
+  if(!a) return alert("No encontramos ese turno.");
+  openClientWhatsApp(a,composeReminder(a));
+};
 function renderAdminAgenda(){
   const el=$("adminAgenda"); if(!el) return;
   if(cloud && adminReady){
@@ -695,11 +745,14 @@ function renderAdminAgenda(){
       let loyalty=reward
         ? '<div class="loyalty-meta"><span class="status-pill reward">Beneficio disponible</span></div>'
         : '<div class="loyalty-meta">Club: '+stamps+' de '+paidTarget+' visitas validadas</div>';
+      if(reminderIsDue(a)) loyalty+='<div class="loyalty-meta"><span class="status-pill reward">Recordatorio recomendado</span></div>';
       let actions='<div class="appt-actions">';
       if(a.status==="confirmed"){
         actions += reward
           ? '<button class="btn primary small" onclick="redeemReward(\''+a.id+'\')">Canjear beneficio</button>'
           : '<button class="btn primary small" onclick="validateVisit(\''+a.id+'\')">Validar visita</button>';
+        actions += '<button class="btn secondary small" onclick="sendConfirmationWhatsApp(\''+a.id+'\')">Confirmar por WhatsApp</button>';
+        actions += '<button class="btn '+(reminderIsDue(a)?"primary":"secondary")+' small" onclick="sendReminderWhatsApp(\''+a.id+'\')">Recordatorio</button>';
         actions += '<button class="btn secondary small" onclick="shareClub(\''+a.id+'\')">Enviar Mi Club</button>';
         actions += '<button class="btn danger small" onclick="cancelAppointment(\''+a.id+'\')">Cancelar</button>';
       }else if(a.status==="completed"){
