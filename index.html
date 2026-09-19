@@ -74,7 +74,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
   <section class="hero">
     <div class="kicker">RESERVA ONLINE</div>
     <h2>Tu próximo corte, sin esperas.</h2>
-    <p>Elegí servicio, profesional y horario. La confirmación y el recordatorio llegan únicamente por WhatsApp.</p>
+    <p>Elegí servicio, profesional y horario. Barshi gestiona la confirmación y el recordatorio por WhatsApp.</p>
     <div class="badges"><div class="badge">✓ Confirmación por WhatsApp</div><div class="badge">✓ Recordatorio por WhatsApp</div><div class="badge club-badge">★ El 10.º corte es gratis</div></div>
   </section>
   <section class="card" id="booking">
@@ -88,8 +88,9 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
   <div class="notice" id="slotHint">Elegí primero un día y después un horario.</div>
   <div class="actions"><button class="btn secondary" onclick="go(2)">Atrás</button><button class="btn primary" onclick="nextTime()">Continuar</button></div>
 </div>
-    <div id="s4" class="hidden"><div class="section-title"><h3>Tus datos</h3><span>Usaremos WhatsApp para avisarte</span></div><div class="form-grid"><div><label>Nombre y apellido</label><input id="name" placeholder="Ej. Juan Pérez"></div><div><label>WhatsApp</label><input id="wa" inputmode="tel" placeholder="Ej. 2494 123456"></div></div><div class="notice">No se envían correos ni SMS. La confirmación y el recordatorio del turno se envían solo por WhatsApp.</div><div class="actions"><button class="btn secondary" onclick="go(3)">Atrás</button><button class="btn primary" onclick="confirmBooking()">Confirmar turno</button></div></div>
-    <div id="s5" class="hidden"><div class="success"><div class="check">✓</div><h3>Turno confirmado</h3><p style="color:var(--muted)">Tu confirmación quedó preparada para WhatsApp.</p></div><div class="summary" id="summary"></div><div class="notice"><b>Recordatorio:</b> el sistema queda configurado para enviar un aviso por WhatsApp antes del turno. El envío automático real requiere conectar la cuenta de WhatsApp Business de Barshi.</div><div class="actions"><span></span><button class="btn primary" onclick="resetBooking()">Reservar otro turno</button></div></div>
+    <div id="s4" class="hidden"><div class="section-title"><h3>Tus datos</h3><span>Usaremos WhatsApp para avisarte</span></div><div class="form-grid"><div><label>Nombre y apellido</label><input id="name" placeholder="Ej. Juan Pérez"></div><div><label>WhatsApp</label><input id="wa" inputmode="tel" placeholder="Ej. 2494 123456"></div></div><div class="notice">No se envían correos ni SMS. Usaremos tu WhatsApp únicamente para gestionar este turno.</div>
+<label class="inline-check" style="margin-top:12px"><input id="waConsent" type="checkbox"> Acepto recibir por WhatsApp la confirmación y el recordatorio relacionados con este turno.</label><div class="actions"><button class="btn secondary" onclick="go(3)">Atrás</button><button class="btn primary" onclick="confirmBooking()">Confirmar turno</button></div></div>
+    <div id="s5" class="hidden"><div class="success"><div class="check">✓</div><h3>Turno confirmado</h3><p style="color:var(--muted)">Tu reserva quedó registrada en la agenda de Barshi.</p></div><div class="summary" id="summary"></div><div class="notice"><b>WhatsApp:</b> Barshi gestiona desde su panel la confirmación y el recordatorio de tu turno.</div><div class="actions"><span></span><button class="btn primary" onclick="resetBooking()">Reservar otro turno</button></div></div>
   </section>
   <section class="card club" id="clubSection">
   <div class="kicker" id="clubLabel">CLUB BARSHI</div>
@@ -255,7 +256,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js?v=20260919-7"></script>
-<script src="./app.js?v=20260919-9"></script>
+<script src="./app.js?v=20260919-10"></script>
 <!-- deploy-refresh-2026-09-18 -->
 </body>
 </html>
