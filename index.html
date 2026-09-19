@@ -21,6 +21,14 @@ button,input,select{font:inherit}button:focus-visible,input:focus-visible,select
 .agenda-table{display:grid;gap:8px}
 .appt{display:grid;grid-template-columns:90px 70px 1fr auto;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px;background:#190a0c}
 .appt .muted{color:var(--muted);font-size:12px}
+.auth-modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:grid;place-items:center;padding:18px;z-index:40}
+.auth-card{width:min(420px,100%);background:#16090b;border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
+.auth-card h3{margin:4px 0 8px;font-size:26px}
+.auth-card p{color:var(--muted);font-size:14px;margin:0 0 18px}
+.auth-card input{margin-bottom:12px}
+.auth-error{min-height:20px;color:#ffb1b1;font-size:13px;margin:4px 0 10px}
+.auth-actions{display:flex;gap:10px}
+.auth-actions .btn{flex:1}
 @media(max-width:760px){.wrap{padding:12px}.top{align-items:flex-start}.grid{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}.steps{grid-template-columns:repeat(5,1fr);gap:5px;position:sticky;top:0;z-index:5;background:#1b0b0e;padding:6px;border-radius:12px}.step{font-size:0;padding:8px 4px;min-height:34px}.step::after{content:attr(data-n);font-size:12px}.brand{gap:10px}.brand-logo-img{width:150px;max-width:48vw;height:auto}.brand h1{font-size:18px}.admin-btn{padding:9px 11px;font-size:13px}.hero{padding:24px 0 14px}.hero h2{font-size:36px}.card{padding:15px;border-radius:18px}.choice{padding:15px;min-height:92px}.btn{min-height:46px}input,select{min-height:48px;font-size:16px}.actions{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,#14080a 30%);padding-top:20px;z-index:4}.actions .btn{flex:1}.stamps{grid-template-columns:repeat(5,1fr)}.inline-form{grid-template-columns:1fr}.panel{padding:14px}.agenda-days{grid-template-columns:repeat(5,minmax(92px,1fr))}.slots{grid-template-columns:repeat(3,1fr)}.appt{grid-template-columns:1fr 1fr}.appt>div{grid-column:1/-1}}}
 @media(max-width:420px){.wrap{padding:10px}.top{gap:8px;align-items:center}.brand p{font-size:12px}.hero h2{font-size:32px}.section-title{align-items:flex-start;flex-direction:column}.section-title h3{font-size:21px}.row{font-size:14px}}
 </style>
@@ -57,7 +65,7 @@ button,input,select{font:inherit}button:focus-visible,input:focus-visible,select
   <section class="card club"><div class="kicker">CLUB BARSHI</div><h3>Nueve visitas. La décima, por la casa.</h3><p style="color:var(--muted)">Reservá siempre con el mismo WhatsApp. Barshi valida un sello después de cada corte.</p><div class="stamps"><div class="stamp">1</div><div class="stamp">2</div><div class="stamp">3</div><div class="stamp">4</div><div class="stamp">5</div><div class="stamp">6</div><div class="stamp">7</div><div class="stamp">8</div><div class="stamp">9</div><div class="stamp">GRATIS</div></div></section>
   <footer>Barshi Barber · Magallanes 436 · Tandil, Buenos Aires · Martes a sábado · 09:00 a 20:00</footer>
 </div>
-<div class="drawer" id="drawer" onclick="if(event.target===this) closeAdmin()"><aside class="panel"><div class="panel-head"><div><div class="kicker">PANEL BARSHI</div><h2 style="margin:4px 0">Administración</h2></div><button class="admin-btn" onclick="closeAdmin()">Cerrar</button></div><div class="tabs"><button class="tab on" onclick="tab('services',this)">Servicios</button><button class="tab" onclick="tab('pros',this)">Profesionales</button><button class="tab" onclick="tab('agenda',this)">Agenda</button><button class="tab" onclick="tab('whatsapp',this)">WhatsApp</button></div>
+<div class="drawer" id="drawer" onclick="if(event.target===this) closeAdmin()"><aside class="panel"><div class="panel-head"><div><div class="kicker">PANEL BARSHI</div><h2 style="margin:4px 0">Administración</h2></div><div style="display:flex;gap:8px"><button id="logoutBtn" class="admin-btn hidden" onclick="adminLogout()">Salir</button><button class="admin-btn" onclick="closeAdmin()">Cerrar</button></div></div><div class="tabs"><button class="tab on" onclick="tab('services',this)">Servicios</button><button class="tab" onclick="tab('pros',this)">Profesionales</button><button class="tab" onclick="tab('agenda',this)">Agenda</button><button class="tab" onclick="tab('whatsapp',this)">WhatsApp</button></div>
 <div id="tab-services"><div class="section-title"><h3>Servicios</h3><span>Agregar, editar o eliminar</span></div><div class="inline-form"><input id="newServiceName" placeholder="Nombre del servicio"><input id="newServicePrice" placeholder="Precio"><input id="newServiceDuration" placeholder="Duración (min)"><input id="newServiceDesc" placeholder="Descripción"></div><button class="btn primary" style="margin:10px 0 14px;width:100%" onclick="addService()">Agregar servicio</button><div class="admin-list" id="adminServices"></div></div>
 <div id="tab-pros" class="hidden"><div class="section-title"><h3>Profesionales</h3><span>Nombre y estado</span></div><div class="inline-form"><input id="newProName" placeholder="Nombre del profesional"><select id="newProActive"><option value="1">Activo</option><option value="0">Inactivo</option></select></div><button class="btn primary" style="margin:10px 0 14px;width:100%" onclick="addPro()">Agregar profesional</button><div class="admin-list" id="adminPros"></div></div>
 <div id="tab-agenda" class="hidden">
@@ -65,136 +73,27 @@ button,input,select{font:inherit}button:focus-visible,input:focus-visible,select
   <div class="agenda-table" id="adminAgenda"></div>
 </div>
 <div id="tab-whatsapp" class="hidden"><div class="section-title"><h3>WhatsApp</h3><span>Solo confirmación y recordatorio</span></div><label>Número de Barshi</label><input id="barshiWa" placeholder="+54 9 249 ..."><label style="margin-top:12px">Recordatorio</label><select id="reminder"><option>24 horas antes</option><option>12 horas antes</option><option>3 horas antes</option></select><div class="notice">Para enviar mensajes automáticos al cliente sin intervención manual hay que conectar WhatsApp Business / Cloud API. En esta versión de revisión podés validar el flujo y los textos.</div><button class="btn primary" style="width:100%" onclick="saveWa()">Guardar configuración</button></div></aside></div>
-<script>
-const defaults={services:[{id:1,name:'Corte clásico',desc:'Asesoramiento, corte y terminación.',duration:'45',price:'12.000'},{id:2,name:'Perfilado de barba',desc:'Diseño, perfilado y cuidado.',duration:'30',price:'9.000'},{id:3,name:'Corte + barba',desc:'La experiencia Barshi completa.',duration:'70',price:'18.000'}],pros:[{id:1,name:'Nicolás',active:true},{id:2,name:'Franco',active:true}],appointments:[],wa:{number:'',reminder:'24 horas antes'}};
-let db=JSON.parse(localStorage.getItem('barshi-db')||'null')||defaults;let booking={service:null,pro:null,date:'',time:'',name:'',wa:''};
-function save(){localStorage.setItem('barshi-db',JSON.stringify(db));renderAll()}function money(x){return '$ '+x}function renderAll(){renderServices();renderPros();renderAdmin();renderAgendaPicker();renderAdminAgenda()}
-function renderServices(){serviceGrid.innerHTML=db.services.map(s=>`<div class="choice ${booking.service&&booking.service.id===s.id?'sel':''}" onclick="selectService(${s.id})"><h4>${s.name}</h4><p>${s.desc||''}</p><div class="meta">${s.duration} min · ${money(s.price)}</div></div>`).join('')}
-function renderPros(){const active=db.pros.filter(p=>p.active);proGrid.innerHTML=`<div class="choice ${booking.pro==='any'?'sel':''}" onclick="selectPro('any')"><h4>Cualquier profesional</h4><p>Te asignamos el próximo disponible.</p><div class="meta">Más opciones de horario</div></div>`+active.map(p=>`<div class="choice ${booking.pro&&booking.pro.id===p.id?'sel':''}" onclick="selectPro(${p.id})"><h4>${p.name}</h4><p>Profesional Barshi</p><div class="meta">Elegir a ${p.name}</div></div>`).join('')}
-function renderAdmin(){db.appointments=db.appointments||[];adminServices.innerHTML=db.services.map(s=>`<div class="admin-item"><strong>${s.name}</strong><span style="color:var(--muted)">${s.duration} min · ${s.price}</span><div class="admin-actions"><button class="btn secondary small" onclick="editService(${s.id})">Editar</button><button class="btn danger small" onclick="deleteService(${s.id})">Eliminar</button></div></div>`).join('');adminPros.innerHTML=db.pros.map(p=>`<div class="admin-item"><strong>${p.name}</strong><span style="color:${p.active?'#7fd394':'#c78f8f'}">${p.active?'Activo':'Inactivo'}</span><div class="admin-actions"><button class="btn secondary small" onclick="togglePro(${p.id})">${p.active?'Desactivar':'Activar'}</button><button class="btn danger small" onclick="deletePro(${p.id})">Eliminar</button></div></div>`).join('');barshiWa.value=db.wa.number||'';reminder.value=db.wa.reminder||'24 horas antes'}
-function selectService(id){booking.service=db.services.find(s=>s.id===id);renderServices()}function selectPro(id){booking.pro=id==='any'?'any':db.pros.find(p=>p.id===id);renderPros()}function nextService(){if(!booking.service)return alert('Elegí un servicio.');go(2)}function nextPro(){if(!booking.pro)return alert('Elegí un profesional.');booking.date='';booking.time='';renderAgendaPicker();go(3)}function nextTime(){if(!booking.date||!booking.time)return alert('Elegí un día y un horario disponible.');go(4)}
 
-function dateKey(d){return d.toISOString().slice(0,10)}
-function upcomingBusinessDays(){
-  const out=[],d=new Date(); d.setHours(12,0,0,0);
-  for(let i=0;out.length<10&&i<20;i++){
-    const x=new Date(d);x.setDate(d.getDate()+i);
-    const wd=x.getDay();
-    if(wd>=2&&wd<=6) out.push(x);
-  }
-  return out;
-}
-const OPEN_MIN=9*60;
-const CLOSE_MIN=20*60;
-const SLOT_STEP=15;
-const CLEANING_BUFFER=15;
-function timeToMinutes(t){
-  const [hh,mm]=String(t).split(':').map(Number);
-  return hh*60+mm;
-}
-function appointmentDuration(a){
-  if(a.duration) return Number(a.duration)||30;
-  const s=(db.services||[]).find(x=>String(x.id)===String(a.serviceId));
-  return s ? Number(s.duration)||30 : 30;
-}
-function intervalsOverlap(startA,durA,startB,durB){
-  const a1=timeToMinutes(startA),a2=a1+Number(durA);
-  const b1=timeToMinutes(startB),b2=b1+Number(durB);
-  return a1<b2 && b1<a2;
-}
-function professionalBusy(proId,day,time,duration){
-  db.appointments=db.appointments||[];
-  return db.appointments.some(a=>{
-    if(a.date!==day || a.status==='cancelled') return false;
-    if(a.proId!=null && String(a.proId)!==String(proId)) return false;
-    return intervalsOverlap(time,duration+CLEANING_BUFFER,a.time,appointmentDuration(a)+CLEANING_BUFFER);
-  });
-}
-function availableProfessionals(day,time,duration){
-  return (db.pros||[]).filter(p=>p.active && !professionalBusy(p.id,day,time,duration));
-}
-function slotUnavailable(day,time){
-  if(!booking.service) return true;
-  const duration=Number(booking.service.duration)||30;
-  const start=timeToMinutes(time);
-  if(start+duration+CLEANING_BUFFER>CLOSE_MIN) return true;
-  const now=new Date();
-  const today=dateKey(now);
-  if(day===today){
-    const current=now.getHours()*60+now.getMinutes();
-    if(start<=current) return true;
-  }
-  if(booking.pro==='any') return availableProfessionals(day,time,duration).length===0;
-  if(booking.pro && booking.pro.id!=null) return professionalBusy(booking.pro.id,day,time,duration);
-  return true;
-}
-function renderAgendaPicker(){
-  const days=document.getElementById('agendaDays'),slots=document.getElementById('slotGrid');
-  if(!days||!slots)return;
-  const ds=upcomingBusinessDays();
-  days.innerHTML=ds.map(d=>{
-    const k=dateKey(d),wd=d.toLocaleDateString('es-AR',{weekday:'short'}),dm=d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit'});
-    return '<button class="day-btn '+(booking.date===k?'sel':'')+'" onclick="pickDay(\''+k+'\')"><b>'+wd+'</b><small>'+dm+'</small></button>'
-  }).join('');
-  if(!booking.date){slots.innerHTML='';return}
-  const times=[];for(let m=OPEN_MIN;m<CLOSE_MIN;m+=SLOT_STEP){const hh=Math.floor(m/60),mm=m%60;times.push(String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0'))}
-  slots.innerHTML=times.map(t=>{
-    const unavailable=slotUnavailable(booking.date,t);
-    return '<button class="slot '+(unavailable?'busy':'')+' '+(booking.time===t?'sel':'')+'" '+(unavailable?'disabled':'onclick="pickTime(\''+t+'\')"')+'>'+t+'</button>';
-  }).join('');
-  const hint=document.getElementById('slotHint');
-  if(hint){
-    const dur=Number(booking.service&&booking.service.duration)||30;
-    hint.textContent=booking.time
-      ? 'Turno seleccionado: '+formatDate(booking.date)+' a las '+booking.time+'.'
-      : 'Elegí uno de los horarios disponibles.';
-  }
-}
-function pickDay(k){booking.date=k;booking.time='';renderAgendaPicker()}
-function pickTime(t){booking.time=t;renderAgendaPicker()}
-function formatDate(k){const [y,m,d]=k.split('-');return d+'/'+m+'/'+y}
-function confirmBooking(){
-  if(!name.value.trim()||!wa.value.trim())return alert('Completá nombre y WhatsApp.');
-  if(!booking.service||!booking.date||!booking.time)return alert('Falta seleccionar el turno.');
-  const duration=Number(booking.service.duration)||30;
-  if(slotUnavailable(booking.date,booking.time)){
-    alert('Ese horario acaba de dejar de estar disponible. Elegí otro.');
-    booking.time='';renderAgendaPicker();go(3);return;
-  }
-  booking.name=name.value.trim();booking.wa=wa.value.trim();
-  let assignedPro=booking.pro;
-  if(booking.pro==='any'){
-    const available=availableProfessionals(booking.date,booking.time,duration);
-    if(!available.length){
-      alert('Ya no quedan profesionales disponibles en ese horario.');
-      booking.time='';renderAgendaPicker();go(3);return;
-    }
-    assignedPro=available[0];
-  }
-  const pro=assignedPro.name;
-  db.appointments=db.appointments||[];
-  db.appointments.push({id:Date.now(),date:booking.date,time:booking.time,duration:duration,cleaningBuffer:CLEANING_BUFFER,service:booking.service.name,serviceId:booking.service.id,pro:pro,proId:assignedPro.id,name:booking.name,wa:booking.wa,status:'confirmed'});
-  save();
-  summary.innerHTML=`<div class="row"><span>Servicio</span><b>${booking.service.name}</b></div><div class="row"><span>Profesional</span><b>${pro}</b></div><div class="row"><span>Fecha</span><b>${formatDate(booking.date)}</b></div><div class="row"><span>Hora</span><b>${booking.time}</b></div><div class="row"><span>Duración</span><b>${duration} min</b></div><div class="row"><span>Cliente</span><b>${booking.name}</b></div><div class="row"><span>WhatsApp</span><b>${booking.wa}</b></div>`;go(5)
-}
-function go(n){[1,2,3,4,5].forEach(i=>document.getElementById('s'+i).classList.toggle('hidden',i!==n));document.querySelectorAll('.step').forEach((el,i)=>el.classList.toggle('on',i<n));window.scrollTo({top:document.getElementById('booking').offsetTop-10,behavior:'smooth'})}
-function resetBooking(){booking={service:null,pro:null,date:'',time:'',name:'',wa:''};name.value='';wa.value='';renderAll();go(1)}function openAdmin(){drawer.classList.add('open');renderAdmin()}function closeAdmin(){drawer.classList.remove('open')}function tab(id,btn){['services','pros','agenda','whatsapp'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));btn.classList.add('on')}
-function addService(){const n=newServiceName.value.trim(),p=newServicePrice.value.trim(),d=newServiceDuration.value.trim(),desc=newServiceDesc.value.trim();if(!n||!p||!d)return alert('Completá nombre, precio y duración.');db.services.push({id:Date.now(),name:n,price:p,duration:d,desc});newServiceName.value=newServicePrice.value=newServiceDuration.value=newServiceDesc.value='';save()}
-function editService(id){const s=db.services.find(x=>x.id===id);if(!s)return;const n=prompt('Nombre del servicio',s.name);if(n===null)return;const p=prompt('Precio',s.price);if(p===null)return;const d=prompt('Duración en minutos',s.duration);if(d===null)return;const desc=prompt('Descripción',s.desc||'');if(desc===null)return;Object.assign(s,{name:n.trim()||s.name,price:p.trim()||s.price,duration:d.trim()||s.duration,desc:desc.trim()});save()}
-function deleteService(id){if(confirm('¿Eliminar este servicio? Los turnos históricos no se borrarían en la versión final.')){db.services=db.services.filter(x=>x.id!==id);save()}}function addPro(){const n=newProName.value.trim();if(!n)return alert('Ingresá el nombre.');db.pros.push({id:Date.now(),name:n,active:newProActive.value==='1'});newProName.value='';save()}function togglePro(id){const p=db.pros.find(x=>x.id===id);if(p){p.active=!p.active;save()}}function deletePro(id){if(confirm('¿Eliminar este profesional?')){db.pros=db.pros.filter(x=>x.id!==id);save()}}function endTimeLabel(start,duration){
-  const total=timeToMinutes(start)+Number(duration||30)+CLEANING_BUFFER;
-  return String(Math.floor(total/60)).padStart(2,'0')+':'+String(total%60).padStart(2,'0');
-}
-function renderAdminAgenda(){
-  const el=document.getElementById('adminAgenda');if(!el)return;
-  db.appointments=db.appointments||[];
-  const arr=[...db.appointments].filter(a=>a.status!=='cancelled').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  el.innerHTML=arr.length?arr.map(a=>{const dur=a.duration||appointmentDuration(a);return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+a.name+'</strong><div class="muted">'+a.service+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.time,dur)+' · '+a.pro+' · '+a.wa+'</div></div><button class="btn danger small" onclick="cancelAppointment('+a.id+')">Cancelar</button></div>'}).join(''):'<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
-}
-function cancelAppointment(id){const a=(db.appointments||[]).find(x=>x.id===id);if(a&&confirm('¿Cancelar este turno?')){a.status='cancelled';save()}}
-function saveWa(){db.wa.number=barshiWa.value.trim();db.wa.reminder=reminder.value;save();alert('Configuración guardada para esta revisión.')}
-renderAll();
-</script>
+<div class="auth-modal hidden" id="authModal" onclick="if(event.target===this) closeAuth()">
+  <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+    <div class="kicker">ACCESO PRIVADO</div>
+    <h3 id="authTitle">Administración Barshi</h3>
+    <p>Ingresá con el usuario autorizado para gestionar servicios, profesionales y turnos.</p>
+    <label for="adminEmail">Email</label>
+    <input id="adminEmail" type="email" autocomplete="username" placeholder="Email">
+    <label for="adminPassword">Contraseña</label>
+    <input id="adminPassword" type="password" autocomplete="current-password" placeholder="Contraseña" onkeydown="if(event.key==='Enter') adminLogin()">
+    <div class="auth-error" id="authError"></div>
+    <div class="auth-actions">
+      <button class="btn secondary" onclick="closeAuth()">Cancelar</button>
+      <button class="btn primary" id="adminLoginBtn" onclick="adminLogin()">Ingresar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="./config.js"></script>
+<script src="./app.js"></script>
 <!-- deploy-refresh-2026-09-18 -->
 </body>
 </html>
