@@ -20,8 +20,21 @@ const defaults = {
     {id:2,name:"Franco",active:true}
   ],
   appointments:[],
+  scheduleBlocks:[],
+  businessHours:[
+    {day_of_week:1,is_open:false,open_time:"09:00",close_time:"20:00"},
+    {day_of_week:2,is_open:true,open_time:"09:00",close_time:"20:00"},
+    {day_of_week:3,is_open:true,open_time:"09:00",close_time:"20:00"},
+    {day_of_week:4,is_open:true,open_time:"09:00",close_time:"20:00"},
+    {day_of_week:5,is_open:true,open_time:"09:00",close_time:"20:00"},
+    {day_of_week:6,is_open:true,open_time:"09:00",close_time:"20:00"},
+    {day_of_week:7,is_open:false,open_time:"09:00",close_time:"20:00"}
+  ],
   wa:{number:"",reminder:"24 horas antes"},
-  settings:{openTime:"09:00",closeTime:"20:00",slotStep:15}
+  settings:{
+    businessName:"Barshi Barber",tagline:"Estilo que te define",address:"Magallanes 436",city:"Tandil",
+    logoUrl:"",slotStep:15,bookingHorizon:30,minimumNotice:30
+  }
 };
 
 let db = JSON.parse(localStorage.getItem(LOCAL_KEY) || "null") || JSON.parse(JSON.stringify(defaults));
@@ -33,6 +46,8 @@ let cloudSlots = [];
 let cloudAppointments = [];
 let cloudAllServices = [];
 let cloudAllPros = [];
+let cloudScheduleBlocks = [];
+let defaultLogoSrc = "";
 
 function money(v){
   const n = Number(String(v).replace(/\./g,"").replace(",","."));
@@ -64,6 +79,29 @@ function mapService(s){
 function mapPro(p){
   return {id:p.id,name:p.name,active:p.active !== false};
 }
+function mapHour(h){
+  return {
+    day_of_week:Number(h.day_of_week),
+    is_open:!!h.is_open,
+    open_time:String(h.open_time||"09:00").slice(0,5),
+    close_time:String(h.close_time||"20:00").slice(0,5)
+  };
+}
+function applySettingsRow(s){
+  if(!s) return;
+  db.wa.number=s.whatsapp_business || "";
+  db.wa.reminder=String(s.reminder_hours || 24)+" horas antes";
+  db.settings={
+    businessName:s.business_name || "Barshi Barber",
+    tagline:s.tagline || "Estilo que te define",
+    address:s.address || "Magallanes 436",
+    city:s.city || "Tandil",
+    logoUrl:s.logo_url || "",
+    slotStep:Number(s.slot_step_minutes||15),
+    bookingHorizon:Number(s.booking_horizon_days||30),
+    minimumNotice:Number(s.minimum_notice_minutes||30)
+  };
+}
 function dateKey(d){
   const y=d.getFullYear();
   const m=String(d.getMonth()+1).padStart(2,"0");
@@ -91,16 +129,20 @@ function intervalsOverlap(startA,durA,startB,durB){
 function upcomingBusinessDays(){
   const out=[], d=new Date();
   d.setHours(12,0,0,0);
-  for(let i=0;out.length<10 && i<25;i++){
+  const horizon=Math.max(10,Number(db.settings&&db.settings.bookingHorizon)||30);
+  for(let i=0;out.length<10 && i<=horizon;i++){
     const x=new Date(d);
     x.setDate(d.getDate()+i);
-    const wd=x.getDay();
-    if(wd>=2 && wd<=6) out.push(x);
+    const iso=x.getDay()===0?7:x.getDay();
+    const cfg=(db.businessHours||[]).find(function(h){return Number(h.day_of_week)===iso;});
+    if(cfg && cfg.is_open) out.push(x);
   }
   return out;
 }
 
 async function init(){
+  const initialLogo=$("brandLogo");
+  if(initialLogo) defaultLogoSrc=initialLogo.src;
   if(cloudConfigured()){
     const c=window.BARSHI_SUPABASE;
     supa=window.supabase.createClient(c.url,c.publishableKey);
@@ -120,21 +162,15 @@ async function loadPublicData(){
     const results=await Promise.all([
       supa.from("services").select("*").eq("active",true).order("sort_order"),
       supa.from("professionals").select("*").eq("active",true).order("name"),
-      supa.from("settings").select("*").eq("id",1).maybeSingle()
+      supa.from("settings").select("*").eq("id",1).maybeSingle(),
+      supa.from("business_hours").select("*").order("day_of_week")
     ]);
     if(results[0].error) throw results[0].error;
     if(results[1].error) throw results[1].error;
     db.services=(results[0].data||[]).map(mapService);
     db.pros=(results[1].data||[]).map(mapPro);
-    if(results[2].data){
-      db.wa.number=results[2].data.whatsapp_business || "";
-      db.wa.reminder=String(results[2].data.reminder_hours || 24)+" horas antes";
-      db.settings={
-        openTime:String(results[2].data.open_time||"09:00").slice(0,5),
-        closeTime:String(results[2].data.close_time||"20:00").slice(0,5),
-        slotStep:Number(results[2].data.slot_step_minutes||15)
-      };
-    }
+    if(results[2].data) applySettingsRow(results[2].data);
+    if(!results[3].error && results[3].data && results[3].data.length) db.businessHours=results[3].data.map(mapHour);
   }catch(e){
     console.error("Supabase public load failed",e);
     cloud=false;
@@ -142,11 +178,15 @@ async function loadPublicData(){
 }
 
 function renderAll(){
+  applyPublicBusinessInfo();
   renderServices();
   renderPros();
   renderAdmin();
   renderAgendaPicker();
   renderAdminAgenda();
+  renderHoursEditor();
+  renderScheduleBlocks();
+  renderBusinessForm();
 }
 function renderServices(){
   const el=$("serviceGrid");
@@ -242,8 +282,9 @@ async function refreshSlots(){
 }
 function renderSlotButtons(available,fromCloud){
   const slots=$("slotGrid");
-  const open=timeToMinutes((db.settings&&db.settings.openTime)||"09:00");
-  const close=timeToMinutes((db.settings&&db.settings.closeTime)||"20:00");
+  const cfg=hourConfigForDate(booking.date) || {open_time:"09:00",close_time:"20:00"};
+  const open=timeToMinutes(cfg.open_time);
+  const close=timeToMinutes(cfg.close_time);
   const step=(db.settings&&db.settings.slotStep)||SLOT_STEP;
   let out=[];
   for(let m=open;m<close;m+=step){
@@ -253,20 +294,37 @@ function renderSlotButtons(available,fromCloud){
   }
   slots.innerHTML=out.join("");
 }
+function hourConfigForDate(day){
+  const d=new Date(day+"T12:00:00");
+  const iso=d.getDay()===0?7:d.getDay();
+  return (db.businessHours||[]).find(function(h){return Number(h.day_of_week)===iso;}) || null;
+}
+function blockOverlapsLocal(day,proId,time,duration){
+  return (db.scheduleBlocks||[]).some(function(b){
+    if(b.block_date!==day) return false;
+    if(b.professional_id && String(b.professional_id)!==String(proId)) return false;
+    if(!b.start_time && !b.end_time) return true;
+    return intervalsOverlap(time,duration+CLEANING_BUFFER,String(b.start_time).slice(0,5),timeToMinutes(String(b.end_time).slice(0,5))-timeToMinutes(String(b.start_time).slice(0,5)));
+  });
+}
 function slotUnavailableLocal(day,time){
   if(!booking.service) return true;
+  const cfg=hourConfigForDate(day);
+  if(!cfg || !cfg.is_open) return true;
   const duration=Number(booking.service.duration)||30;
   const start=timeToMinutes(time);
-  const close=timeToMinutes((db.settings&&db.settings.closeTime)||"20:00");
-  if(start+duration+CLEANING_BUFFER>close) return true;
+  const open=timeToMinutes(cfg.open_time), close=timeToMinutes(cfg.close_time);
+  if(start<open || start+duration+CLEANING_BUFFER>close) return true;
   const now=new Date();
-  if(day===dateKey(now) && start<=now.getHours()*60+now.getMinutes()) return true;
+  const notice=Number(db.settings&&db.settings.minimumNotice)||0;
+  if(day===dateKey(now) && start<=(now.getHours()*60+now.getMinutes()+notice)) return true;
   if(booking.pro==="any"){
     return !(db.pros||[]).some(function(p){return p.active && !professionalBusyLocal(p.id,day,time,duration);});
   }
   return !booking.pro || professionalBusyLocal(booking.pro.id,day,time,duration);
 }
 function professionalBusyLocal(proId,day,time,duration){
+  if(blockOverlapsLocal(day,proId,time,duration)) return true;
   return (db.appointments||[]).some(function(a){
     if(a.date!==day || a.status==="cancelled") return false;
     if(a.proId!=null && String(a.proId)!==String(proId)) return false;
@@ -411,7 +469,7 @@ window.adminLogout=async function(){
   closeAdmin();
 };
 window.tab=function(id,btn){
-  ["services","pros","agenda","whatsapp"].forEach(function(x){
+  ["services","pros","agenda","hours","business","whatsapp"].forEach(function(x){
     const el=$("tab-"+x); if(el) el.classList.toggle("hidden",x!==id);
   });
   document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("on");});
@@ -428,13 +486,26 @@ async function loadAdminData(){
       .select("id,appointment_date,appointment_time,duration_minutes,status,client_name,client_whatsapp,service_id,professional_id,services(name),professionals(name)")
       .gte("appointment_date",dateKey(new Date()))
       .order("appointment_date",{ascending:true})
-      .order("appointment_time",{ascending:true})
+      .order("appointment_time",{ascending:true}),
+    supa.from("schedule_blocks")
+      .select("id,block_date,start_time,end_time,reason,professional_id,professionals(name)")
+      .gte("block_date",dateKey(new Date()))
+      .order("block_date",{ascending:true}),
+    supa.from("business_hours").select("*").order("day_of_week"),
+    supa.from("settings").select("*").eq("id",1).maybeSingle()
   ]);
   if(!results[0].error) cloudAllServices=(results[0].data||[]).map(mapService);
   if(!results[1].error) cloudAllPros=(results[1].data||[]).map(mapPro);
   if(!results[2].error) cloudAppointments=results[2].data||[];
+  if(!results[3].error) cloudScheduleBlocks=results[3].data||[];
+  if(!results[4].error && results[4].data) db.businessHours=results[4].data.map(mapHour);
+  if(!results[5].error && results[5].data) applySettingsRow(results[5].data);
   renderAdmin();
   renderAdminAgenda();
+  renderHoursEditor();
+  renderScheduleBlocks();
+  renderBusinessForm();
+  applyPublicBusinessInfo();
 }
 function renderAdmin(){
   const serviceEl=$("adminServices"), proEl=$("adminPros");
@@ -457,6 +528,14 @@ function renderAdmin(){
   }
   if($("barshiWa")) $("barshiWa").value=db.wa.number||"";
   if($("reminder")) $("reminder").value=db.wa.reminder||"24 horas antes";
+  if($("bookingHorizon")) $("bookingHorizon").value=String((db.settings&&db.settings.bookingHorizon)||30);
+  if($("minimumNotice")) $("minimumNotice").value=String((db.settings&&db.settings.minimumNotice)||30);
+  const bp=$("blockProfessional");
+  if(bp){
+    const current=bp.value;
+    bp.innerHTML='<option value="">Todo el local</option>'+pros.filter(function(p){return p.active;}).map(function(p){return '<option value="'+p.id+'">'+escapeHtml(p.name)+'</option>';}).join("");
+    bp.value=current;
+  }
 }
 window.addService=async function(){
   const n=$("newServiceName").value.trim();
@@ -569,6 +648,191 @@ window.saveWa=async function(){
     db.wa.number=number;db.wa.reminder=reminder;saveLocal();
   }
   alert("Configuración guardada.");
+};
+
+
+function applyPublicBusinessInfo(){
+  const s=db.settings||{};
+  const name=s.businessName||"Barshi Barber";
+  const address=[s.address,s.city].filter(Boolean).join(" · ");
+  document.title=name+" · Turnos";
+  if($("headerAddress")) $("headerAddress").textContent=address;
+  if($("brandLogo")){
+    $("brandLogo").alt=name;
+    $("brandLogo").src=s.logoUrl || defaultLogoSrc || $("brandLogo").src;
+  }
+  if($("footerBusiness")) $("footerBusiness").textContent=name+" · "+address+" · "+hoursSummary();
+}
+function dayName(n){
+  return ["","Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"][Number(n)]||"";
+}
+function shortDay(n){
+  return ["","Lun","Mar","Mié","Jue","Vie","Sáb","Dom"][Number(n)]||"";
+}
+function hoursSummary(){
+  const open=(db.businessHours||[]).filter(function(h){return h.is_open;});
+  if(!open.length) return "Agenda cerrada";
+  const groups=[];
+  open.forEach(function(h){
+    const key=h.open_time+"-"+h.close_time;
+    let g=groups.find(function(x){return x.key===key;});
+    if(!g){g={key:key,days:[],open:h.open_time,close:h.close_time};groups.push(g);}
+    g.days.push(Number(h.day_of_week));
+  });
+  return groups.map(function(g){
+    const ds=g.days;
+    let label=ds.length>1 && ds.every(function(v,i){return i===0||v===ds[i-1]+1;})
+      ? shortDay(ds[0])+" a "+shortDay(ds[ds.length-1])
+      : ds.map(shortDay).join(", ");
+    return label+" · "+String(g.open).slice(0,5)+"–"+String(g.close).slice(0,5);
+  }).join(" / ");
+}
+function renderBusinessForm(){
+  const s=db.settings||{};
+  if($("businessName")) $("businessName").value=s.businessName||"";
+  if($("businessTagline")) $("businessTagline").value=s.tagline||"";
+  if($("businessAddress")) $("businessAddress").value=s.address||"";
+  if($("businessCity")) $("businessCity").value=s.city||"";
+  if($("businessLogoPreview")) $("businessLogoPreview").src=s.logoUrl || defaultLogoSrc || ($("brandLogo")&&$("brandLogo").src) || "";
+}
+function renderHoursEditor(){
+  const el=$("businessHoursEditor"); if(!el) return;
+  const hours=(db.businessHours||[]).slice().sort(function(x,y){return x.day_of_week-y.day_of_week;});
+  el.innerHTML=hours.map(function(h){
+    const d=h.day_of_week;
+    return '<div class="hours-row" data-day="'+d+'">'+
+      '<label>'+dayName(d)+'</label>'+
+      '<label class="open-toggle"><input class="hours-open" type="checkbox" '+(h.is_open?"checked":"")+' onchange="toggleHourRow('+d+')"> Abierto</label>'+
+      '<input class="hours-from" type="time" value="'+String(h.open_time).slice(0,5)+'" '+(!h.is_open?"disabled":"")+' aria-label="Apertura '+dayName(d)+'">'+
+      '<input class="hours-to" type="time" value="'+String(h.close_time).slice(0,5)+'" '+(!h.is_open?"disabled":"")+' aria-label="Cierre '+dayName(d)+'">'+
+    '</div>';
+  }).join("");
+}
+window.toggleHourRow=function(day){
+  const row=document.querySelector('.hours-row[data-day="'+day+'"]'); if(!row) return;
+  const open=row.querySelector(".hours-open").checked;
+  row.querySelector(".hours-from").disabled=!open;
+  row.querySelector(".hours-to").disabled=!open;
+};
+window.saveBusinessHours=async function(){
+  const rows=Array.from(document.querySelectorAll(".hours-row"));
+  const payload=rows.map(function(row){
+    const day=Number(row.dataset.day);
+    const isOpen=row.querySelector(".hours-open").checked;
+    const from=row.querySelector(".hours-from").value || "09:00";
+    const to=row.querySelector(".hours-to").value || "20:00";
+    if(isOpen && timeToMinutes(to)<=timeToMinutes(from)) throw new Error(dayName(day)+": el cierre debe ser posterior a la apertura.");
+    return {day_of_week:day,is_open:isOpen,open_time:from,close_time:to,updated_at:new Date().toISOString()};
+  });
+  const horizon=Number($("bookingHorizon").value||30);
+  const notice=Number($("minimumNotice").value||30);
+  try{
+    if(cloud){
+      const r1=await supa.from("business_hours").upsert(payload,{onConflict:"day_of_week"});
+      if(r1.error) throw r1.error;
+      const r2=await supa.from("settings").update({booking_horizon_days:horizon,minimum_notice_minutes:notice,updated_at:new Date().toISOString()}).eq("id",1);
+      if(r2.error) throw r2.error;
+      await loadAdminData(); await loadPublicData();
+    }else{
+      db.businessHours=payload.map(mapHour);
+      db.settings.bookingHorizon=horizon;db.settings.minimumNotice=notice;saveLocal();
+    }
+    renderAll(); alert("Horarios actualizados.");
+  }catch(e){ alert(e.message||"No se pudieron guardar los horarios."); }
+};
+window.toggleBlockTimeFields=function(){
+  const full=$("blockAllDay").checked;
+  $("blockStart").disabled=full; $("blockEnd").disabled=full;
+  if(full){$("blockStart").value="";$("blockEnd").value="";}
+};
+function renderScheduleBlocks(){
+  const el=$("scheduleBlocksList"); if(!el) return;
+  const arr=cloud&&adminReady ? cloudScheduleBlocks : (db.scheduleBlocks||[]);
+  el.innerHTML=arr.length ? arr.map(function(b){
+    const whole=!b.start_time&&!b.end_time;
+    const when=whole ? "Día completo" : String(b.start_time).slice(0,5)+"–"+String(b.end_time).slice(0,5);
+    const pro=b.professionals&&b.professionals.name ? b.professionals.name : (b.professional_name||"Todo el local");
+    return '<div class="block-item"><b>'+formatDate(b.block_date)+'</b><div><strong>'+escapeHtml(when)+' · '+escapeHtml(pro)+'</strong><div class="muted">'+escapeHtml(b.reason||"Bloqueo de agenda")+'</div></div><button class="btn danger small" onclick="deleteScheduleBlock(\''+b.id+'\')">Eliminar</button></div>';
+  }).join("") : '<div class="notice">No hay cierres o bloqueos próximos.</div>';
+}
+window.addScheduleBlock=async function(){
+  const date=$("blockDate").value;
+  const pro=$("blockProfessional").value || null;
+  const full=$("blockAllDay").checked;
+  const start=full?null:$("blockStart").value;
+  const end=full?null:$("blockEnd").value;
+  const reason=$("blockReason").value.trim();
+  if(!date) return alert("Elegí una fecha.");
+  if(!full && (!start||!end||timeToMinutes(end)<=timeToMinutes(start))) return alert("Revisá el horario del bloqueo.");
+  const payload={block_date:date,professional_id:pro,start_time:start,end_time:end,reason:reason};
+  if(cloud){
+    const res=await supa.from("schedule_blocks").insert(payload);
+    if(res.error) return alert("No se pudo bloquear la agenda.");
+    await loadAdminData();
+  }else{
+    db.scheduleBlocks=db.scheduleBlocks||[];
+    db.scheduleBlocks.push(Object.assign({id:Date.now()},payload));saveLocal();
+  }
+  $("blockReason").value=""; $("blockDate").value=""; $("blockAllDay").checked=true; toggleBlockTimeFields();
+  renderScheduleBlocks();
+};
+window.deleteScheduleBlock=async function(id){
+  if(!confirm("¿Eliminar este bloqueo de agenda?")) return;
+  if(cloud){
+    const res=await supa.from("schedule_blocks").delete().eq("id",id);
+    if(res.error) return alert("No se pudo eliminar.");
+    await loadAdminData();
+  }else{
+    db.scheduleBlocks=(db.scheduleBlocks||[]).filter(function(b){return String(b.id)!==String(id);});saveLocal();
+  }
+  renderScheduleBlocks();
+};
+function compressLogo(file){
+  return new Promise(function(resolve,reject){
+    if(!file || !file.type.startsWith("image/")) return reject(new Error("Elegí una imagen válida."));
+    if(file.size>5*1024*1024) return reject(new Error("El archivo es demasiado grande. Máximo 5 MB."));
+    const reader=new FileReader();
+    reader.onload=function(){
+      const img=new Image();
+      img.onload=function(){
+        const maxW=900,maxH=500;
+        const scale=Math.min(1,maxW/img.width,maxH/img.height);
+        const canvas=document.createElement("canvas");
+        canvas.width=Math.max(1,Math.round(img.width*scale));
+        canvas.height=Math.max(1,Math.round(img.height*scale));
+        const ctx=canvas.getContext("2d");
+        ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        resolve(canvas.toDataURL("image/webp",0.88));
+      };
+      img.onerror=function(){reject(new Error("No pudimos procesar la imagen."));};
+      img.src=reader.result;
+    };
+    reader.onerror=function(){reject(new Error("No pudimos leer el archivo."));};
+    reader.readAsDataURL(file);
+  });
+}
+window.saveBusinessInfo=async function(){
+  const name=$("businessName").value.trim();
+  const tagline=$("businessTagline").value.trim();
+  const address=$("businessAddress").value.trim();
+  const city=$("businessCity").value.trim();
+  if(!name||!address||!city) return alert("Completá nombre, dirección y ciudad.");
+  let logo=(db.settings&&db.settings.logoUrl)||"";
+  const file=$("businessLogoFile").files[0];
+  try{
+    if(file) logo=await compressLogo(file);
+    if(cloud){
+      const res=await supa.from("settings").update({
+        business_name:name,tagline:tagline,address:address,city:city,logo_url:logo,updated_at:new Date().toISOString()
+      }).eq("id",1);
+      if(res.error) throw res.error;
+      await loadAdminData(); await loadPublicData();
+    }else{
+      Object.assign(db.settings,{businessName:name,tagline:tagline,address:address,city:city,logoUrl:logo});saveLocal();
+    }
+    if($("businessLogoFile")) $("businessLogoFile").value="";
+    renderAll(); alert("Datos del negocio actualizados.");
+  }catch(e){alert(e.message||"No se pudieron guardar los datos.");}
 };
 
 document.addEventListener("DOMContentLoaded",init);
