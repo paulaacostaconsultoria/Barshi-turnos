@@ -436,3 +436,86 @@ create index if not exists idx_clients_whatsapp on public.clients(whatsapp);
 -- 1) Create the admin user in Supabase > Authentication > Users.
 -- 2) Copy its UUID and run:
 -- insert into public.admin_users(user_id) values ('PASTE-USER-UUID-HERE');
+
+
+-- Security/performance hardening for Barshi Turnos
+
+drop policy if exists "public active services" on public.services;
+drop policy if exists "admin services" on public.services;
+create policy "services select"
+on public.services for select to anon, authenticated
+using (
+  active
+  or exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+);
+create policy "services insert admin"
+on public.services for insert to authenticated
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "services update admin"
+on public.services for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "services delete admin"
+on public.services for delete to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "public active professionals" on public.professionals;
+drop policy if exists "admin professionals" on public.professionals;
+create policy "professionals select"
+on public.professionals for select to anon, authenticated
+using (
+  active
+  or exists (select 1 from public.admin_users au where au.user_id = (select auth.uid()))
+);
+create policy "professionals insert admin"
+on public.professionals for insert to authenticated
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "professionals update admin"
+on public.professionals for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "professionals delete admin"
+on public.professionals for delete to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "public professional services" on public.professional_services;
+drop policy if exists "admin professional services" on public.professional_services;
+create policy "professional services select"
+on public.professional_services for select to anon, authenticated using (true);
+create policy "professional services insert admin"
+on public.professional_services for insert to authenticated
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "professional services update admin"
+on public.professional_services for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "professional services delete admin"
+on public.professional_services for delete to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "public business hours" on public.business_hours;
+drop policy if exists "admin business hours" on public.business_hours;
+create policy "business hours select"
+on public.business_hours for select to anon, authenticated using (true);
+create policy "business hours insert admin"
+on public.business_hours for insert to authenticated
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "business hours update admin"
+on public.business_hours for update to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())))
+with check (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+create policy "business hours delete admin"
+on public.business_hours for delete to authenticated
+using (exists (select 1 from public.admin_users au where au.user_id = (select auth.uid())));
+
+drop policy if exists "own admin row" on public.admin_users;
+create policy "own admin row"
+on public.admin_users for select to authenticated
+using (user_id = (select auth.uid()));
+
+revoke execute on function public.is_admin() from public, anon, authenticated;
+
+create index if not exists idx_appointments_client_id on public.appointments(client_id);
+create index if not exists idx_appointments_service_id on public.appointments(service_id);
+create index if not exists idx_professional_services_service_id on public.professional_services(service_id);
+create index if not exists idx_schedule_blocks_professional_id on public.schedule_blocks(professional_id);
