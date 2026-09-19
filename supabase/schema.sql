@@ -1051,3 +1051,35 @@ alter table public.appointments
 
 create index if not exists idx_push_subscriptions_user
 on public.admin_push_subscriptions(user_id);
+
+
+-- Aviso inmediato de nuevas reservas
+create extension if not exists pg_net;
+
+create or replace function public.notify_new_booking_push()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.status = 'confirmed' then
+    perform net.http_post(
+      url := 'https://vzpeofhmqrumcgwzwkkr.supabase.co/functions/v1/notify-booking',
+      body := jsonb_build_object('appointment_id', new.id),
+      headers := jsonb_build_object(
+        'Content-Type','application/json',
+        'apikey','sb_publishable_p8C4f1CPFc5nSn7c-zVTHA_qYzcLYzn'
+      ),
+      timeout_milliseconds := 5000
+    );
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_notify_new_booking_push on public.appointments;
+create trigger trg_notify_new_booking_push
+after insert on public.appointments
+for each row
+execute function public.notify_new_booking_push();
