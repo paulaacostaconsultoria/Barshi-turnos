@@ -37,7 +37,16 @@ const defaults = {
   }
 };
 
-let db = JSON.parse(localStorage.getItem(LOCAL_KEY) || "null") || JSON.parse(JSON.stringify(defaults));
+const storedDb = JSON.parse(localStorage.getItem(LOCAL_KEY) || "null") || {};
+let db = {
+  services:Array.isArray(storedDb.services)?storedDb.services:JSON.parse(JSON.stringify(defaults.services)),
+  pros:Array.isArray(storedDb.pros)?storedDb.pros:JSON.parse(JSON.stringify(defaults.pros)),
+  appointments:Array.isArray(storedDb.appointments)?storedDb.appointments:[],
+  scheduleBlocks:Array.isArray(storedDb.scheduleBlocks)?storedDb.scheduleBlocks:[],
+  businessHours:Array.isArray(storedDb.businessHours)&&storedDb.businessHours.length?storedDb.businessHours:JSON.parse(JSON.stringify(defaults.businessHours)),
+  wa:Object.assign({},defaults.wa,storedDb.wa||{}),
+  settings:Object.assign({},defaults.settings,storedDb.settings||{})
+};
 let booking = {service:null,pro:null,date:"",time:"",name:"",wa:""};
 let supa = null;
 let cloud = false;
@@ -270,8 +279,9 @@ async function refreshSlots(){
     renderSlotButtons(available,true);
   }else{
     const available=new Set();
-    const open=timeToMinutes((db.settings&&db.settings.openTime)||"09:00");
-    const close=timeToMinutes((db.settings&&db.settings.closeTime)||"20:00");
+    const cfg=hourConfigForDate(booking.date)||{open_time:"09:00",close_time:"20:00"};
+    const open=timeToMinutes(cfg.open_time);
+    const close=timeToMinutes(cfg.close_time);
     for(let m=open;m<close;m+=SLOT_STEP){
       const t=String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
       if(!slotUnavailableLocal(booking.date,t)) available.add(t);
