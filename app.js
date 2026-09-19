@@ -260,23 +260,6 @@ window.disablePushNotifications=async function(){
   if(sub) await sub.unsubscribe();
   await updatePushNotificationStatus();
 };
-async function triggerAdminPush(appointmentId){
-  if(!appointmentId || !cloud) return;
-  const c=getSupabaseConfig();
-  try{
-    await fetch(c.url+"/functions/v1/notify-booking",{
-      method:"POST",
-      headers:{
-        "Content-Type":"application/json",
-        "apikey":c.publishableKey
-      },
-      body:JSON.stringify({appointment_id:appointmentId})
-    });
-  }catch(e){
-    console.warn("No se pudo enviar la notificación de nueva reserva",e);
-  }
-}
-
 async function init(){
   registerPushWorker();
   const initialLogo=$("brandLogo");
@@ -510,7 +493,6 @@ window.confirmBooking=async function(){
     }
     const row=(res.data||[])[0];
     proName=row ? row.professional_name : (booking.pro==="any" ? "Profesional disponible" : booking.pro.name);
-    if(row && row.appointment_id) triggerAdminPush(row.appointment_id);
   }else{
     const duration=Number(booking.service.duration)||30;
     if(slotUnavailableLocal(booking.date,booking.time)){
