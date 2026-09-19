@@ -260,7 +260,7 @@ svc as (
 slots as (
   select gs::time as slot_time,
          gs as slot_start,
-         gs + make_interval(mins => (select duration_minutes from svc) + (select cleaning_buffer_minutes from cfg)) as blocked_end
+         gs + make_interval(mins => (select duration_minutes from svc)) as service_end
   from cfg, hours, svc,
   lateral generate_series(
     p_date + hours.open_time,
@@ -272,7 +272,7 @@ slots as (
     and gs >= now() + make_interval(mins => cfg.minimum_notice_minutes)
 ),
 candidates as (
-  select s.slot_time, p.id professional_id, p.name professional_name, s.slot_start, s.blocked_end
+  select s.slot_time, p.id professional_id, p.name professional_name, s.slot_start, s.service_end
   from slots s
   join public.professionals p on p.active
   where (p_professional_id is null or p.id=p_professional_id)
@@ -289,7 +289,7 @@ candidates as (
           or
           (
             s.slot_start < (p_date + b.end_time)
-            and (p_date + b.start_time) < s.blocked_end
+            and (p_date + b.start_time) < s.service_end
           )
         )
     )
@@ -300,7 +300,7 @@ candidates as (
         and a.status <> 'cancelled'
         and s.slot_start < (a.appointment_date + a.appointment_time
             + make_interval(mins => a.duration_minutes + cfg.cleaning_buffer_minutes))
-        and (a.appointment_date + a.appointment_time) < s.blocked_end
+        and (a.appointment_date + a.appointment_time) < s.service_end
     )
 )
 select distinct on (slot_time) slot_time, professional_id, professional_name
@@ -332,7 +332,7 @@ declare
   v_client uuid;
   v_appt uuid;
   v_start timestamp;
-  v_end timestamp;
+  v_service_end timestamp;
 begin
   if nullif(trim(p_client_name),'') is null or nullif(trim(p_client_whatsapp),'') is null then
     raise exception 'Nombre y WhatsApp son obligatorios';
@@ -357,7 +357,7 @@ begin
   end if;
 
   v_start := p_date + p_time;
-  v_end := v_start + make_interval(mins => v_duration + v_buffer);
+  v_service_end := v_start + make_interval(mins => v_duration);
 
   if p_time < v_open or p_time >= v_close
      or v_start < now() + make_interval(mins => v_notice) then
@@ -385,7 +385,7 @@ begin
           or
           (
             v_start < (p_date + b.end_time)
-            and (p_date + b.start_time) < v_end
+            and (p_date + b.start_time) < v_service_end
           )
         )
     ) then
@@ -399,7 +399,7 @@ begin
         and a.status <> 'cancelled'
         and v_start < (a.appointment_date + a.appointment_time
             + make_interval(mins => a.duration_minutes + v_buffer))
-        and (a.appointment_date + a.appointment_time) < v_end
+        and (a.appointment_date + a.appointment_time) < v_service_end
     ) then
       insert into public.clients(full_name, whatsapp)
       values(trim(p_client_name),trim(p_client_whatsapp))
