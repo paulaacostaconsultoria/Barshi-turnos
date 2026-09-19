@@ -360,7 +360,7 @@ function slotUnavailableLocal(day,time){
   const duration=Number(booking.service.duration)||30;
   const start=timeToMinutes(time);
   const open=timeToMinutes(cfg.open_time), close=timeToMinutes(cfg.close_time);
-  if(start<open || start+duration+CLEANING_BUFFER>close) return true;
+  if(start<open || start>=close) return true;
   const now=new Date();
   const notice=Number(db.settings&&db.settings.minimumNotice)||0;
   if(day===dateKey(now) && start<=(now.getHours()*60+now.getMinutes()+notice)) return true;
