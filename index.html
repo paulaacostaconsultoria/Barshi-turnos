@@ -38,7 +38,7 @@ button,input,select{font:inherit}button:focus-visible,input:focus-visible,select
     <div class="kicker">RESERVA ONLINE</div>
     <h2>Tu próximo corte, sin esperas.</h2>
     <p>Elegí servicio, profesional y horario. La confirmación y el recordatorio llegan únicamente por WhatsApp.</p>
-    <div class="badges"><div class="badge">✓ 15 min entre turnos para limpieza y desinfección</div><div class="badge">✓ Confirmación por WhatsApp</div><div class="badge">✓ Recordatorio por WhatsApp</div><div class="badge">★ El 10.º corte es gratis</div></div>
+    <div class="badges"><div class="badge">✓ Confirmación por WhatsApp</div><div class="badge">✓ Recordatorio por WhatsApp</div><div class="badge">★ El 10.º corte es gratis</div></div>
   </section>
   <section class="card" id="booking">
     <div class="steps"><div class="step on" data-n="1">1 Servicio</div><div class="step" data-n="2">2 Profesional</div><div class="step" data-n="3">3 Horario</div><div class="step" data-n="4">4 Datos</div><div class="step" data-n="5">5 Listo</div></div>
@@ -146,8 +146,8 @@ function renderAgendaPicker(){
   if(hint){
     const dur=Number(booking.service&&booking.service.duration)||30;
     hint.textContent=booking.time
-      ? 'Turno seleccionado: '+formatDate(booking.date)+' a las '+booking.time+' · servicio '+dur+' min + '+CLEANING_BUFFER+' min de limpieza.'
-      : 'Elegí uno de los horarios disponibles. Se reservan '+dur+' min de servicio + '+CLEANING_BUFFER+' min para limpieza y desinfección.';
+      ? 'Turno seleccionado: '+formatDate(booking.date)+' a las '+booking.time+'.'
+      : 'Elegí uno de los horarios disponibles.';
   }
 }
 function pickDay(k){booking.date=k;booking.time='';renderAgendaPicker()}
@@ -175,7 +175,7 @@ function confirmBooking(){
   db.appointments=db.appointments||[];
   db.appointments.push({id:Date.now(),date:booking.date,time:booking.time,duration:duration,cleaningBuffer:CLEANING_BUFFER,service:booking.service.name,serviceId:booking.service.id,pro:pro,proId:assignedPro.id,name:booking.name,wa:booking.wa,status:'confirmed'});
   save();
-  summary.innerHTML=`<div class="row"><span>Servicio</span><b>${booking.service.name}</b></div><div class="row"><span>Profesional</span><b>${pro}</b></div><div class="row"><span>Fecha</span><b>${formatDate(booking.date)}</b></div><div class="row"><span>Hora</span><b>${booking.time}</b></div><div class="row"><span>Duración</span><b>${duration} min</b></div><div class="row"><span>Preparación</span><b>+ ${CLEANING_BUFFER} min de limpieza</b></div><div class="row"><span>Cliente</span><b>${booking.name}</b></div><div class="row"><span>WhatsApp</span><b>${booking.wa}</b></div>`;go(5)
+  summary.innerHTML=`<div class="row"><span>Servicio</span><b>${booking.service.name}</b></div><div class="row"><span>Profesional</span><b>${pro}</b></div><div class="row"><span>Fecha</span><b>${formatDate(booking.date)}</b></div><div class="row"><span>Hora</span><b>${booking.time}</b></div><div class="row"><span>Duración</span><b>${duration} min</b></div><div class="row"><span>Cliente</span><b>${booking.name}</b></div><div class="row"><span>WhatsApp</span><b>${booking.wa}</b></div>`;go(5)
 }
 function go(n){[1,2,3,4,5].forEach(i=>document.getElementById('s'+i).classList.toggle('hidden',i!==n));document.querySelectorAll('.step').forEach((el,i)=>el.classList.toggle('on',i<n));window.scrollTo({top:document.getElementById('booking').offsetTop-10,behavior:'smooth'})}
 function resetBooking(){booking={service:null,pro:null,date:'',time:'',name:'',wa:''};name.value='';wa.value='';renderAll();go(1)}function openAdmin(){drawer.classList.add('open');renderAdmin()}function closeAdmin(){drawer.classList.remove('open')}function tab(id,btn){['services','pros','agenda','whatsapp'].forEach(x=>document.getElementById('tab-'+x).classList.toggle('hidden',x!==id));document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));btn.classList.add('on')}
@@ -189,7 +189,7 @@ function renderAdminAgenda(){
   const el=document.getElementById('adminAgenda');if(!el)return;
   db.appointments=db.appointments||[];
   const arr=[...db.appointments].filter(a=>a.status!=='cancelled').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
-  el.innerHTML=arr.length?arr.map(a=>{const dur=a.duration||appointmentDuration(a);return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+a.name+'</strong><div class="muted">'+a.service+' · '+dur+' min + '+CLEANING_BUFFER+' min limpieza · ocupado hasta '+endTimeLabel(a.time,dur)+' · '+a.pro+' · '+a.wa+'</div></div><button class="btn danger small" onclick="cancelAppointment('+a.id+')">Cancelar</button></div>'}).join(''):'<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
+  el.innerHTML=arr.length?arr.map(a=>{const dur=a.duration||appointmentDuration(a);return '<div class="appt"><b>'+formatDate(a.date)+'</b><b>'+a.time+'</b><div><strong>'+a.name+'</strong><div class="muted">'+a.service+' · '+dur+' min · ocupado hasta '+endTimeLabel(a.time,dur)+' · '+a.pro+' · '+a.wa+'</div></div><button class="btn danger small" onclick="cancelAppointment('+a.id+')">Cancelar</button></div>'}).join(''):'<div class="notice">Todavía no hay turnos registrados en este navegador.</div>';
 }
 function cancelAppointment(id){const a=(db.appointments||[]).find(x=>x.id===id);if(a&&confirm('¿Cancelar este turno?')){a.status='cancelled';save()}}
 function saveWa(){db.wa.number=barshiWa.value.trim();db.wa.reminder=reminder.value;save();alert('Configuración guardada para esta revisión.')}
