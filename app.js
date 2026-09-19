@@ -374,7 +374,7 @@ function professionalBusyLocal(proId,day,time,duration){
   return (db.appointments||[]).some(function(a){
     if(a.date!==day || a.status==="cancelled") return false;
     if(a.proId!=null && String(a.proId)!==String(proId)) return false;
-    return intervalsOverlap(time,duration+CLEANING_BUFFER,a.time,Number(a.duration||30)+CLEANING_BUFFER);
+    return intervalsOverlap(time,duration,a.time,Number(a.duration||30)+CLEANING_BUFFER);
   });
 }
 window.pickDay=function(k){ booking.date=k; booking.time=""; renderAgendaPicker(); };
