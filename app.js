@@ -358,8 +358,7 @@ async function verifyAdmin(userId){
 }
 window.openAdmin=async function(){
   if(!cloud){
-    $("drawer").classList.add("open");
-    renderAdmin();
+    showAuth("La administración segura todavía no está conectada a la base de datos. Falta configurar Supabase.");
     return;
   }
   const sessionRes=await supa.auth.getSession();
