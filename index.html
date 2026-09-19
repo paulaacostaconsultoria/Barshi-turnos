@@ -100,7 +100,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 </div>
     <div id="s4" class="hidden"><div class="section-title"><h3>Tus datos</h3><span>Usaremos WhatsApp para avisarte</span></div><div class="form-grid"><div><label>Nombre y apellido</label><input id="name" placeholder="Ej. Juan Pérez"></div><div><label>WhatsApp</label><input id="wa" inputmode="tel" placeholder="Ej. 2494 123456"></div></div><div class="notice">No se envían correos ni SMS. Usaremos tu WhatsApp únicamente para gestionar este turno.</div>
 <label class="inline-check" style="margin-top:12px"><input id="waConsent" type="checkbox"> Acepto recibir por WhatsApp la confirmación y el recordatorio relacionados con este turno.</label><div class="actions"><button class="btn secondary" onclick="go(3)">Atrás</button><button class="btn primary" onclick="confirmBooking()">Confirmar turno</button></div></div>
-    <div id="s5" class="hidden"><div class="success"><div class="check">✓</div><h3>Turno confirmado</h3><p style="color:var(--muted)">Tu reserva quedó registrada en la agenda de Barshi.</p></div><div class="summary" id="summary"></div><div class="notice"><b>WhatsApp:</b> Barshi gestiona desde su panel la confirmación y el recordatorio de tu turno.</div><div class="actions"><span></span><button class="btn primary" onclick="resetBooking()">Reservar otro turno</button></div></div>
+    <div id="s5" class="hidden"><div class="success"><div class="check">✓</div><h3>Turno confirmado</h3><p style="color:var(--muted)"><b>Tu reserva ya está hecha.</b></p></div><div class="summary" id="summary"></div><div class="notice"><b>Importante:</b> la confirmación por WhatsApp puede demorar unas horas. No necesitás volver a reservar: tu turno ya quedó registrado en la agenda de Barshi.</div><div class="actions"><span></span><button class="btn primary" onclick="resetBooking()">Reservar otro turno</button></div></div>
   </section>
   <section class="card club" id="clubSection">
   <div class="kicker" id="clubLabel">CLUB BARSHI</div>
@@ -260,7 +260,27 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
   </div>
 </div>
 
-<div id="tab-whatsapp" class="hidden"><div class="section-title"><h3>WhatsApp</h3><span>Solo confirmación y recordatorio</span></div><label>Número de Barshi</label><input id="barshiWa" placeholder="+54 9 249 ..."><label style="margin-top:12px">Recordatorio</label><select id="reminder"><option>24 horas antes</option><option>12 horas antes</option><option>3 horas antes</option></select><div class="notice">Para enviar mensajes automáticos al cliente sin intervención manual hay que conectar WhatsApp Business / Cloud API. En esta versión de revisión podés validar el flujo y los textos.</div><button class="btn primary" style="width:100%" onclick="saveWa()">Guardar configuración</button></div></aside></div>
+<div id="tab-whatsapp" class="hidden">
+  <div class="section-title"><h3>Avisos y WhatsApp</h3><span>Reservas en tiempo real</span></div>
+
+  <div class="admin-section">
+    <h4>Notificación inmediata de nuevas reservas</h4>
+    <div class="notice"><b>Gratis.</b> Activá esta opción en cada celular donde quieras recibir el aviso. Cuando entre una reserva, el teléfono mostrará una notificación aunque no tengas abierta la página.</div>
+    <div id="pushStatus" class="field-help" style="margin:12px 0">Comprobando estado…</div>
+    <div class="admin-actions">
+      <button class="btn primary" onclick="enablePushNotifications()">Activar notificaciones en este celular</button>
+      <button class="btn secondary" onclick="disablePushNotifications()">Desactivar en este celular</button>
+    </div>
+  </div>
+
+  <div class="admin-section">
+    <h4>WhatsApp al cliente</h4>
+    <div class="notice">La reserva queda confirmada en el momento. La confirmación por WhatsApp se gestiona desde Agenda y puede enviarse unas horas después. No usamos API paga.</div>
+    <label>Número de Barshi</label><input id="barshiWa" placeholder="+54 9 249 ...">
+    <label style="margin-top:12px">Recordatorio</label><select id="reminder"><option>24 horas antes</option><option>12 horas antes</option><option>3 horas antes</option></select>
+    <button class="btn primary" style="width:100%;margin-top:12px" onclick="saveWa()">Guardar configuración</button>
+  </div>
+</div></aside></div>
 
 <div class="auth-modal hidden" id="authModal" onclick="if(event.target===this) closeAuth()">
   <div class="auth-card" role="dialog" aria-modal="true" aria-labelledby="authTitle">
@@ -281,7 +301,7 @@ button,input,select,textarea{font:inherit}button:focus-visible,input:focus-visib
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./config.js?v=20260919-7"></script>
-<script src="./app.js?v=20260919-14"></script>
+<script src="./app.js?v=20260919-15"></script>
 <!-- deploy-refresh-2026-09-18 -->
 </body>
 </html>
