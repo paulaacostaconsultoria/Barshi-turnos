@@ -1150,3 +1150,76 @@ revoke all on function public.claim_due_reminder_appointments() from public, ano
 grant execute on function public.claim_due_reminder_appointments() to service_role;
 
 -- Producción: cron 'barshi-reminder-push' ejecuta notify-reminders cada 5 minutos.
+
+
+-- Permisos explícitos para Data API (compatibles con el cambio de Supabase del 30/10/2026)
+
+-- Lectura pública necesaria para la web de reservas
+grant select on table public.services to anon;
+grant select on table public.professionals to anon;
+grant select on table public.professional_services to anon;
+grant select on table public.business_hours to anon;
+grant select on table public.settings to anon;
+grant select on table public.promotions to anon;
+
+-- Datos privados: sin acceso directo anónimo
+revoke all on table public.clients from anon;
+revoke all on table public.appointments from anon;
+revoke all on table public.admin_users from anon;
+revoke all on table public.schedule_blocks from anon;
+revoke all on table public.admin_push_subscriptions from anon;
+revoke all on table public.push_config from anon;
+
+-- Administración autenticada
+grant select, insert, update, delete on table public.services to authenticated;
+grant select, insert, update, delete on table public.professionals to authenticated;
+grant select, insert, update, delete on table public.professional_services to authenticated;
+grant select, insert, update, delete on table public.clients to authenticated;
+grant select, insert, update, delete on table public.appointments to authenticated;
+grant select, update on table public.settings to authenticated;
+grant select on table public.admin_users to authenticated;
+grant select, insert, update, delete on table public.business_hours to authenticated;
+grant select, insert, update, delete on table public.schedule_blocks to authenticated;
+grant select, insert, update, delete on table public.promotions to authenticated;
+grant select, insert, update, delete on table public.admin_push_subscriptions to authenticated;
+revoke all on table public.push_config from authenticated;
+
+-- Backend / Edge Functions
+grant all privileges on table public.services to service_role;
+grant all privileges on table public.professionals to service_role;
+grant all privileges on table public.professional_services to service_role;
+grant all privileges on table public.clients to service_role;
+grant all privileges on table public.appointments to service_role;
+grant all privileges on table public.settings to service_role;
+grant all privileges on table public.admin_users to service_role;
+grant all privileges on table public.business_hours to service_role;
+grant all privileges on table public.schedule_blocks to service_role;
+grant all privileges on table public.promotions to service_role;
+grant all privileges on table public.admin_push_subscriptions to service_role;
+grant all privileges on table public.push_config to service_role;
+
+-- RPC públicas de reservas y Mi Club
+revoke all on function public.available_slots(date,uuid,uuid) from public;
+grant execute on function public.available_slots(date,uuid,uuid) to anon, authenticated;
+
+revoke all on function public.book_appointment(uuid,uuid,date,time,text,text) from public;
+grant execute on function public.book_appointment(uuid,uuid,date,time,text,text) to anon, authenticated;
+
+revoke all on function public.get_club_status(uuid) from public;
+grant execute on function public.get_club_status(uuid) to anon, authenticated;
+
+-- RPC privadas de administración
+revoke all on function public.validate_appointment_visit(uuid) from public, anon;
+grant execute on function public.validate_appointment_visit(uuid) to authenticated;
+
+revoke all on function public.redeem_appointment_reward(uuid) from public, anon;
+grant execute on function public.redeem_appointment_reward(uuid) to authenticated;
+
+revoke all on function public.rotate_club_access_token(uuid) from public, anon;
+grant execute on function public.rotate_club_access_token(uuid) to authenticated;
+
+revoke all on function public.register_manual_visit(text,text,uuid,uuid,date,time) from public, anon;
+grant execute on function public.register_manual_visit(text,text,uuid,uuid,date,time) to authenticated;
+
+revoke all on function public.claim_due_reminder_appointments() from public, anon, authenticated;
+grant execute on function public.claim_due_reminder_appointments() to service_role;
